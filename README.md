@@ -8,19 +8,19 @@
 
 ### Method 1: Download & Execute (Recommended)
 ```bash
-curl -fsSL https://raw.githubusercontent.com/theihasan/server-setup/main/lamp.sh -o setup.sh
+curl -fsSL https://raw.githubusercontent.com/theihasan/server-setup/main/setup.sh -o setup.sh
 chmod +x setup.sh
 ./setup.sh
 ```
 
 ### Method 2: Process Substitution
 ```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/theihasan/server-setup/main/lamp.sh)
+bash <(curl -fsSL https://raw.githubusercontent.com/theihasan/server-setup/main/setup.sh)
 ```
 
 ### Method 3: Direct Pipe (Basic - Limited Interaction)
 ```bash
-curl -fsSL https://raw.githubusercontent.com/theihasan/server-setup/main/lamp.sh | bash
+curl -fsSL https://raw.githubusercontent.com/theihasan/server-setup/main/setup.sh | bash
 ```
 
 > **💡 Tip**: Method 1 is recommended as it allows you to review the script first and provides full interactive capabilities.
