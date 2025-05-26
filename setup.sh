@@ -13,10 +13,10 @@
 # - Laravel optimization
 # - Production-ready configurations
 #
-# Fork Repository: https://github.com/theihasan/laravel-server-setup
+# Fork Repository: https://github.com/theihasan/server-setup
 #############################################################################
 
-
+# Fix for piped execution - redirect stdin from TTY if available
 if [ ! -t 0 ]; then
     if [ -t 1 ]; then
         exec < /dev/tty
@@ -29,18 +29,18 @@ if [ ! -t 0 ]; then
         echo "Please use one of these methods instead:"
         echo ""
         echo "Method 1 (Recommended):"
-        echo "  curl -fsSL https://raw.githubusercontent.com/theihasan/laravel-server-setup/main/setup.sh -o setup.sh"
+        echo "  curl -fsSL https://raw.githubusercontent.com/theihasan/server-setup/main/lamp.sh -o setup.sh"
         echo "  chmod +x setup.sh"
         echo "  ./setup.sh"
         echo ""
         echo "Method 2:"
-        echo "  bash <(curl -fsSL https://raw.githubusercontent.com/theihasan/laravel-server-setup/main/setup.sh)"
+        echo "  bash <(curl -fsSL https://raw.githubusercontent.com/theihasan/server-setup/main/lamp.sh)"
         echo ""
         exit 1
     fi
 fi
 
-
+# Enhanced read function with better error handling
 safe_read() {
     local prompt="$1"
     local default="$2"
@@ -130,7 +130,7 @@ select_database() {
     esac
 }
 
-
+# Function to prompt for database credentials
 get_database_credentials() {
     if [ "$DB_TYPE" = "mysql" ]; then
         read -p "Enter MySQL username (default: admin): " DB_USER
@@ -1010,6 +1010,21 @@ handle_npm_build() {
     if [ -f "package.json" ]; then
         echo "✓ Found package.json - Frontend dependencies available"
 
+        # Fix NPM cache permissions first
+        echo "Setting up NPM cache permissions..."
+        sudo mkdir -p /var/www/.npm
+        sudo chown -R www-data:www-data /var/www/.npm
+        sudo mkdir -p /home/www-data/.npm
+        sudo chown -R www-data:www-data /home/www-data/.npm
+
+        # Set NPM cache directory for www-data user
+        sudo -u www-data npm config set cache /var/www/.npm
+        sudo -u www-data npm config set prefix /var/www/.npm-global
+
+        # Clean any existing problematic cache
+        echo "Cleaning NPM cache..."
+        sudo -u www-data npm cache clean --force 2>/dev/null || true
+
         # Detect frontend framework/build tools
         echo "Detecting frontend setup..."
         if grep -q "vite" package.json; then
@@ -1040,13 +1055,54 @@ handle_npm_build() {
         echo ""
         if confirm "Do you want to install NPM dependencies and build assets?"; then
 
-            # Install dependencies with progress
+            # Clean up any problematic existing node_modules
+            if [ -d "node_modules" ]; then
+                echo "Cleaning existing node_modules..."
+                sudo rm -rf node_modules package-lock.json 2>/dev/null || true
+            fi
+
+            # Install dependencies with progress and proper error handling
             echo "Installing NPM dependencies (this may take a few minutes)..."
             echo "Progress will be shown below:"
 
-            if sudo -u www-data npm install --progress=true; then
-                echo "✓ NPM dependencies installed successfully"
+            # Try multiple installation strategies
+            NPM_INSTALL_SUCCESS=false
 
+            # Strategy 1: Standard install
+            echo "Attempting standard NPM install..."
+            if sudo -u www-data npm install --no-audit --no-fund --progress=false 2>/dev/null; then
+                NPM_INSTALL_SUCCESS=true
+                echo "✓ NPM dependencies installed successfully"
+            else
+                echo "⚠ Standard install failed, trying alternative methods..."
+
+                # Strategy 2: Legacy peer deps
+                echo "Trying with legacy peer deps..."
+                if sudo -u www-data npm install --legacy-peer-deps --no-audit --no-fund --progress=false 2>/dev/null; then
+                    NPM_INSTALL_SUCCESS=true
+                    echo "✓ NPM dependencies installed with legacy peer deps"
+                else
+                    echo "⚠ Legacy peer deps failed, trying force install..."
+
+                    # Strategy 3: Force install
+                    echo "Trying with force flag..."
+                    if sudo -u www-data npm install --force --no-audit --no-fund --progress=false 2>/dev/null; then
+                        NPM_INSTALL_SUCCESS=true
+                        echo "✓ NPM dependencies installed with force flag"
+                    else
+                        echo "⚠ Force install failed, trying cache-free install..."
+
+                        # Strategy 4: No cache
+                        echo "Trying without cache..."
+                        if sudo -u www-data npm install --no-cache --legacy-peer-deps --no-audit --no-fund 2>/dev/null; then
+                            NPM_INSTALL_SUCCESS=true
+                            echo "✓ NPM dependencies installed without cache"
+                        fi
+                    fi
+                fi
+            fi
+
+            if [ "$NPM_INSTALL_SUCCESS" = true ]; then
                 echo ""
                 echo "Build Options:"
                 if [ "$BUILD_TOOL" = "vite" ]; then
@@ -1084,6 +1140,9 @@ handle_npm_build() {
                             fi
                         else
                             echo "❌ Production build failed"
+                            echo "You can try building manually later with:"
+                            echo "  cd /var/www/html/$REPO_NAME"
+                            echo "  sudo -u www-data npm run build"
                         fi
                         ;;
                     2)
@@ -1134,32 +1193,26 @@ handle_npm_build() {
                 fi
 
             else
-                echo "❌ NPM install failed"
+                echo "❌ All NPM install methods failed"
                 echo ""
-                echo "Common solutions:"
-                echo "  1. Node version compatibility issues"
-                echo "  2. Network connectivity problems"
-                echo "  3. Permission issues"
-                echo "  4. Dependency conflicts"
+                echo "This appears to be due to:"
+                echo "  1. Permission issues with NPM cache"
+                echo "  2. Corrupted node_modules from previous attempts"
+                echo "  3. Network connectivity problems"
+                echo "  4. Package dependency conflicts"
                 echo ""
-                if confirm "Do you want to try alternative install methods?"; then
-                    echo "Trying with legacy peer deps..."
-                    if sudo -u www-data npm install --legacy-peer-deps; then
-                        echo "✓ NPM install succeeded with legacy peer deps"
-                    else
-                        echo "Trying with force flag..."
-                        if sudo -u www-data npm install --force; then
-                            echo "✓ NPM install succeeded with force flag"
-                        else
-                            echo "❌ All NPM install methods failed"
-                            echo ""
-                            echo "Manual troubleshooting steps:"
-                            echo "  cd /var/www/html/$REPO_NAME"
-                            echo "  sudo -u www-data npm cache clean --force"
-                            echo "  sudo -u www-data rm -rf node_modules package-lock.json"
-                            echo "  sudo -u www-data npm install"
-                        fi
-                    fi
+                echo "Manual troubleshooting steps:"
+                echo "  cd /var/www/html/$REPO_NAME"
+                echo "  sudo chown -R www-data:www-data ."
+                echo "  sudo -u www-data rm -rf node_modules package-lock.json"
+                echo "  sudo -u www-data npm cache clean --force"
+                echo "  sudo -u www-data npm install --legacy-peer-deps"
+                echo ""
+                if confirm "Do you want to continue without frontend assets? (You can build them manually later)"; then
+                    echo "Continuing without frontend build..."
+                else
+                    echo "Installation paused. Please resolve NPM issues manually and re-run the script."
+                    exit 1
                 fi
             fi
         else
@@ -1167,6 +1220,7 @@ handle_npm_build() {
             echo ""
             echo "To set up frontend assets manually later:"
             echo "  cd /var/www/html/$REPO_NAME"
+            echo "  sudo chown -R www-data:www-data ."
             echo "  sudo -u www-data npm install"
             if [ "$BUILD_TOOL" = "vite" ]; then
                 echo "  sudo -u www-data npm run build    # For production"
