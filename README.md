@@ -6,11 +6,24 @@
 
 ## ⚡ Quick Start
 
-Deploy a complete LAMP stack with Laravel support in one command:
-
+### Method 1: Download & Execute (Recommended)
 ```bash
-curl -fsSL https://raw.githubusercontent.com/theihasan/laravel-server-setup/main/setup.sh | bash
+curl -fsSL https://raw.githubusercontent.com/theihasan/server-setup/main/lamp.sh -o setup.sh
+chmod +x setup.sh
+./setup.sh
 ```
+
+### Method 2: Process Substitution
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/theihasan/server-setup/main/lamp.sh)
+```
+
+### Method 3: Direct Pipe (Basic - Limited Interaction)
+```bash
+curl -fsSL https://raw.githubusercontent.com/theihasan/server-setup/main/lamp.sh | bash
+```
+
+> **💡 Tip**: Method 1 is recommended as it allows you to review the script first and provides full interactive capabilities.
 
 ## 🔥 What You Get
 
@@ -45,17 +58,12 @@ curl -fsSL https://raw.githubusercontent.com/theihasan/laravel-server-setup/main
 
 ## 🛠️ Installation Options
 
-### Option 1: Direct Install (Recommended)
+### Option 1: Download & Execute (Recommended)
 ```bash
-curl -fsSL https://raw.githubusercontent.com/theihasan/server-setup/main/setup.sh | bash
-```
+# Download and review the script
+curl -fsSL https://raw.githubusercontent.com/theihasan/server-setup/main/lamp.sh -o setup.sh
 
-### Option 2: Review First, Then Install
-```bash
-# Download and review
-curl -fsSL https://raw.githubusercontent.com/theihasan/server-setup/main/setup.sh -o setup.sh
-
-# Review the script
+# Review the script (optional but recommended)
 cat setup.sh
 
 # Make executable and run
@@ -63,10 +71,24 @@ chmod +x setup.sh
 ./setup.sh
 ```
 
-### Option 3: Wget Alternative
+### Option 2: Process Substitution
 ```bash
-wget -qO- https://raw.githubusercontent.com/theihasan/server-setup/main/lamp.sh | bash
+bash <(curl -fsSL https://raw.githubusercontent.com/theihasan/server-setup/main/lamp.sh)
 ```
+
+### Option 3: Direct Pipe (Limited Features)
+```bash
+curl -fsSL https://raw.githubusercontent.com/theihasan/server-setup/main/lamp.sh | bash
+```
+
+### Option 4: Wget Alternative
+```bash
+wget -qO setup.sh https://raw.githubusercontent.com/theihasan/server-setup/main/lamp.sh
+chmod +x setup.sh
+./setup.sh
+```
+
+> **⚠️ Note**: Methods 3 may have limited interactive capabilities due to stdin redirection. Use Method 1 or 2 for full functionality.
 
 ## 🎮 Interactive Setup
 
@@ -79,12 +101,12 @@ The script will guide you through:
 5. **Node.js Installation** (Optional)
 6. **Repository Cloning** (Your GitHub repo)
 7. **Advanced Queue Setup**:
-    - Queue driver selection (Database/Redis/Hybrid)
-    - Cache driver (File/Database/Redis)
-    - Session driver (File/Database/Redis)
-    - Multiple queue configuration
-    - Process count optimization based on server specs
-    - Priority and timeout settings
+   - Queue driver selection (Database/Redis/Hybrid)
+   - Cache driver (File/Database/Redis)
+   - Session driver (File/Database/Redis)
+   - Multiple queue configuration
+   - Process count optimization based on server specs
+   - Priority and timeout settings
 8. **SSL Certificate** (Let's Encrypt)
 
 ## 📦 Installed Components
@@ -157,6 +179,31 @@ php artisan migrate                                 # Run migrations
 - ✅ Log file protection
 
 ## 🚨 Troubleshooting
+
+### Installation Issues
+
+#### "Invalid selection" Error When Using Pipe
+```bash
+# This may not work properly:
+curl -fsSL https://raw.githubusercontent.com/theihasan/server-setup/main/lamp.sh | bash
+
+# Use this instead:
+curl -fsSL https://raw.githubusercontent.com/theihasan/server-setup/main/lamp.sh -o setup.sh
+chmod +x setup.sh
+./setup.sh
+
+# Or use process substitution:
+bash <(curl -fsSL https://raw.githubusercontent.com/theihasan/server-setup/main/lamp.sh)
+```
+
+#### Script Download Issues
+```bash
+# If download fails, try with wget:
+wget --no-check-certificate -qO setup.sh https://raw.githubusercontent.com/theihasan/server-setup/main/lamp.sh
+
+# Or force TLS 1.2:
+curl --tlsv1.2 -fsSL https://raw.githubusercontent.com/theihasan/server-setup/main/lamp.sh -o setup.sh
+```
 
 ### Permission Issues
 ```bash
@@ -237,9 +284,9 @@ This project is open source and available under the [MIT License](LICENSE).
 
 ## 🙋‍♂️ Support
 
-- **Issues**: [GitHub Issues](https://github.com/theihasan/server-setup/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/theihasan/server-setup/discussions)
-- **Email**: [your-email@domain.com]
+- **Issues**: [GitHub Issues](https://github.com/theihasan/laravel-server-setup/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/theihasan/laravel-server-setup/discussions)
+- **Email**: [imabulhasan99@gmail.com](mailto:imabulhasan99@gmail.com)
 
 ## ⭐ Show Your Support
 

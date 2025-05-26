@@ -13,8 +13,58 @@
 # - Laravel optimization
 # - Production-ready configurations
 #
-# Fork Repository: https://github.com/theihasan/laravel-server-setup
+# Fork Repository: https://github.com/theihasan/server-setup
 #############################################################################
+
+# Fix for piped execution - redirect stdin from TTY if available
+if [ ! -t 0 ]; then
+    if [ -t 1 ]; then
+        exec < /dev/tty
+    else
+        echo "=========================================="
+        echo "⚠️  INTERACTIVE INPUT REQUIRED"
+        echo "=========================================="
+        echo "This script requires interactive input but is being run in a non-interactive way."
+        echo ""
+        echo "Please use one of these methods instead:"
+        echo ""
+        echo "Method 1 (Recommended):"
+        echo "  curl -fsSL https://raw.githubusercontent.com/theihasan/server-setup/main/lamp.sh -o setup.sh"
+        echo "  chmod +x setup.sh"
+        echo "  ./setup.sh"
+        echo ""
+        echo "Method 2:"
+        echo "  bash <(curl -fsSL https://raw.githubusercontent.com/theihasan/server-setup/main/lamp.sh)"
+        echo ""
+        exit 1
+    fi
+fi
+
+# Enhanced read function with better error handling
+safe_read() {
+    local prompt="$1"
+    local default="$2"
+    local var_name="$3"
+    local response
+
+    if [ ! -t 0 ]; then
+        echo "Error: Cannot read input in non-interactive mode"
+        exit 1
+    fi
+
+    if [ -n "$default" ]; then
+        read -r -p "$prompt (default: $default): " response
+        response=${response:-$default}
+    else
+        read -r -p "$prompt: " response
+    fi
+
+    if [ -n "$var_name" ]; then
+        eval "$var_name='$response'"
+    else
+        echo "$response"
+    fi
+}
 
 # Function to display error messages
 error_exit() {
@@ -44,7 +94,7 @@ select_php_version() {
     echo "4) PHP 8.2"
     echo "5) PHP 8.3"
     echo "6) PHP 8.4"
-    read -p "Select PHP version (1-6): " php_choice
+    safe_read "Select PHP version (1-6)" "" php_choice
 
     case $php_choice in
         1) PHP_VERSION="7.4" ;;
@@ -63,8 +113,7 @@ select_database() {
     echo "Available database systems:"
     echo "1) MySQL (default)"
     echo "2) PostgreSQL"
-    read -p "Select database system (1-2, default: 1): " db_choice
-    db_choice=${db_choice:-1}
+    safe_read "Select database system (1-2)" "1" db_choice
 
     case $db_choice in
         1)
@@ -457,7 +506,14 @@ EOF
 }
 
 # Update system
-echo "Updating system packages..."
+echo "=========================================="
+echo "🚀 Laravel Server Setup Script"
+echo "=========================================="
+echo "Enhanced LAMP/LEMP stack with Laravel optimization"
+echo "Original: github.com/sohag-pro/SingleCommand"
+echo "Enhanced: github.com/theihasan/server-setup"
+echo ""
+echo "Starting system update..."
 sudo apt update || error_exit "Failed to update system packages"
 
 # Install ACL for better permission management
@@ -468,8 +524,7 @@ sudo apt install -y acl || error_exit "Failed to install ACL"
 echo "Available web servers:"
 echo "1) Apache (default)"
 echo "2) Nginx"
-read -p "Select web server (1-2, default: 1): " web_server_choice
-web_server_choice=${web_server_choice:-1}
+safe_read "Select web server (1-2)" "1" web_server_choice
 
 case $web_server_choice in
     1)
