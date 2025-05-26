@@ -8,19 +8,19 @@
 
 ### Method 1: Download & Execute (Recommended)
 ```bash
-curl -fsSL https://raw.githubusercontent.com/theihasan/server-setup/main/setup.sh -o setup.sh
+curl -fsSL https://raw.githubusercontent.com/theihasan/laravel-server-setup/main/setup.sh -o setup.sh
 chmod +x setup.sh
 ./setup.sh
 ```
 
 ### Method 2: Process Substitution
 ```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/theihasan/server-setup/main/setup.sh)
+bash <(curl -fsSL https://raw.githubusercontent.com/theihasan/laravel-server-setup/main/setup.sh)
 ```
 
 ### Method 3: Direct Pipe (Basic - Limited Interaction)
 ```bash
-curl -fsSL https://raw.githubusercontent.com/theihasan/server-setup/main/setup.sh | bash
+curl -fsSL https://raw.githubusercontent.com/theihasan/laravel-server-setup/main/setup.sh | bash
 ```
 
 > **💡 Tip**: Method 1 is recommended as it allows you to review the script first and provides full interactive capabilities.
@@ -61,7 +61,7 @@ curl -fsSL https://raw.githubusercontent.com/theihasan/server-setup/main/setup.s
 ### Option 1: Download & Execute (Recommended)
 ```bash
 # Download and review the script
-curl -fsSL https://raw.githubusercontent.com/theihasan/server-setup/main/lamp.sh -o setup.sh
+curl -fsSL https://raw.githubusercontent.com/theihasan/laravel-server-setup/main/setup.sh -o setup.sh
 
 # Review the script (optional but recommended)
 cat setup.sh
@@ -73,17 +73,17 @@ chmod +x setup.sh
 
 ### Option 2: Process Substitution
 ```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/theihasan/server-setup/main/lamp.sh)
+bash <(curl -fsSL https://raw.githubusercontent.com/theihasan/laravel-server-setup/main/setup.sh)
 ```
 
 ### Option 3: Direct Pipe (Limited Features)
 ```bash
-curl -fsSL https://raw.githubusercontent.com/theihasan/server-setup/main/lamp.sh | bash
+curl -fsSL https://raw.githubusercontent.com/theihasan/laravel-server-setup/main/setup.sh | bash
 ```
 
 ### Option 4: Wget Alternative
 ```bash
-wget -qO setup.sh https://raw.githubusercontent.com/theihasan/server-setup/main/lamp.sh
+wget -qO setup.sh https://raw.githubusercontent.com/theihasan/laravel-server-setup/main/setup.sh
 chmod +x setup.sh
 ./setup.sh
 ```
@@ -185,24 +185,24 @@ php artisan migrate                                 # Run migrations
 #### "Invalid selection" Error When Using Pipe
 ```bash
 # This may not work properly:
-curl -fsSL https://raw.githubusercontent.com/theihasan/server-setup/main/lamp.sh | bash
+curl -fsSL https://raw.githubusercontent.com/theihasan/laravel-server-setup/main/setup.sh | bash
 
 # Use this instead:
-curl -fsSL https://raw.githubusercontent.com/theihasan/server-setup/main/lamp.sh -o setup.sh
+curl -fsSL https://raw.githubusercontent.com/theihasan/laravel-server-setup/main/setup.sh -o setup.sh
 chmod +x setup.sh
 ./setup.sh
 
 # Or use process substitution:
-bash <(curl -fsSL https://raw.githubusercontent.com/theihasan/server-setup/main/lamp.sh)
+bash <(curl -fsSL https://raw.githubusercontent.com/theihasan/laravel-server-setup/main/setup.sh)
 ```
 
 #### Script Download Issues
 ```bash
 # If download fails, try with wget:
-wget --no-check-certificate -qO setup.sh https://raw.githubusercontent.com/theihasan/server-setup/main/lamp.sh
+wget --no-check-certificate -qO setup.sh https://raw.githubusercontent.com/theihasan/laravel-server-setup/main/setup.sh
 
 # Or force TLS 1.2:
-curl --tlsv1.2 -fsSL https://raw.githubusercontent.com/theihasan/server-setup/main/lamp.sh -o setup.sh
+curl --tlsv1.2 -fsSL https://raw.githubusercontent.com/theihasan/laravel-server-setup/main/setup.sh -o setup.sh
 ```
 
 ### Permission Issues
