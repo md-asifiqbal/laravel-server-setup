@@ -196,6 +196,24 @@ chmod +x setup.sh
 bash <(curl -fsSL https://raw.githubusercontent.com/theihasan/laravel-server-setup/main/setup.sh)
 ```
 
+#### Composer Issues
+```bash
+# GitHub token authentication required
+# The script will prompt for this, or you can set it manually:
+composer config --global github-oauth.github.com YOUR_TOKEN
+
+# Network timeouts during package download
+# The script has multiple fallback strategies built-in
+
+# Cache permission issues
+sudo chown -R www-data:www-data /var/www/.cache
+sudo chown -R www-data:www-data /var/www/.config
+
+# Manual composer install if automated fails
+cd /var/www/html/your-project
+sudo -u www-data composer install --prefer-dist
+```
+
 #### Script Download Issues
 ```bash
 # If download fails, try with wget:
@@ -284,9 +302,9 @@ This project is open source and available under the [MIT License](LICENSE).
 
 ## 🙋‍♂️ Support
 
-- **Issues**: [GitHub Issues](https://github.com/theihasan/laravel-server-setup/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/theihasan/laravel-server-setup/discussions)
-- **Email**: [imabulhasan99@gmail.com](mailto:imabulhasan99@gmail.com)
+- **Issues**: [GitHub Issues](https://github.com/theihasan/server-setup/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/theihasan/server-setup/discussions)
+- **Email**: [your-email@domain.com]
 
 ## ⭐ Show Your Support
 

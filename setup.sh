@@ -29,12 +29,12 @@ if [ ! -t 0 ]; then
         echo "Please use one of these methods instead:"
         echo ""
         echo "Method 1 (Recommended):"
-        echo "  curl -fsSL https://raw.githubusercontent.com/theihasan/server-setup/main/lamp.sh -o setup.sh"
+        echo "  curl -fsSL https://raw.githubusercontent.com/theihasan/laravel-server-setup/main/setup.sh -o setup.sh"
         echo "  chmod +x setup.sh"
         echo "  ./setup.sh"
         echo ""
         echo "Method 2:"
-        echo "  bash <(curl -fsSL https://raw.githubusercontent.com/theihasan/server-setup/main/lamp.sh)"
+        echo "  bash <(curl -fsSL https://raw.githubusercontent.com/theihasan/laravel-server-setup/main/setup.sh)"
         echo ""
         exit 1
     fi
@@ -624,7 +624,7 @@ fi
 
 # Install Git
 echo "Installing Git..."
-sudo apt install -y git || error_exit "Failed to install Git"
+sudo apt install -y git unzip || error_exit "Failed to install Git and unzip"
 
 # Install Composer
 echo "Installing Composer..."
@@ -633,6 +633,19 @@ curl -sS https://getcomposer.org/installer -o /tmp/composer-setup.php
 HASH=$(curl -sS https://composer.github.io/installer.sig)
 php -r "if (hash_file('SHA384', '/tmp/composer-setup.php') === '$HASH') { echo 'Installer verified'; } else { echo 'Installer corrupt'; unlink('composer-setup.php'); } echo PHP_EOL;"
 sudo php /tmp/composer-setup.php --install-dir=/usr/local/bin --filename=composer
+
+# Configure composer globally for better performance
+echo "Configuring Composer for optimal performance..."
+sudo mkdir -p /var/www/.composer
+sudo chown -R www-data:www-data /var/www/.composer
+
+# Set global composer configurations
+sudo -u www-data composer config --global process-timeout 2000
+sudo -u www-data composer config --global cache-read-only false
+sudo -u www-data composer config --global htaccess-protect false
+
+# Setup GitHub token for better API limits
+setup_github_token
 
 # Function to select Node.js version
 select_node_version() {
@@ -694,9 +707,68 @@ cd "$REPO_NAME"
 # Set comprehensive permissions
 set_project_permissions
 
+# Create composer cache directories with proper permissions
+sudo mkdir -p /var/www/.cache/composer/files
+sudo mkdir -p /var/www/.cache/composer/repo
+sudo mkdir -p /var/www/.config/composer
+sudo chown -R www-data:www-data /var/www/.cache
+sudo chown -R www-data:www-data /var/www/.config
+sudo chmod -R 755 /var/www/.cache
+sudo chmod -R 755 /var/www/.config
+
 # Install dependencies with Composer
 echo "Installing Composer dependencies..."
-sudo -u www-data composer install || error_exit "Failed to install Composer dependencies"
+
+# Fix composer cache permissions first
+sudo mkdir -p /var/www/.cache/composer
+sudo mkdir -p /var/www/.config/composer
+sudo chown -R www-data:www-data /var/www/.cache
+sudo chown -R www-data:www-data /var/www/.config
+
+# Set composer configuration to avoid GitHub API rate limits and improve performance
+sudo -u www-data composer config --global process-timeout 2000
+sudo -u www-data composer config --global repos.packagist composer https://packagist.org
+sudo -u www-data composer config --global cache-files-maxsize 1GB
+sudo -u www-data composer config --global cache-repo-dir /var/www/.cache/composer/repo
+sudo -u www-data composer config --global cache-files-dir /var/www/.cache/composer/files
+
+# Check if composer.lock exists to determine installation method
+if [ -f "composer.lock" ]; then
+    echo "Found composer.lock - installing exact versions..."
+    INSTALL_CMD="install"
+else
+    echo "No composer.lock found - updating to latest versions..."
+    INSTALL_CMD="update"
+fi
+
+# Install with optimized settings and better error handling
+echo "Installing dependencies (this may take a few minutes)..."
+echo "Note: Installation may pause for large packages - this is normal."
+
+# Try different installation strategies
+if sudo -u www-data composer $INSTALL_CMD --optimize-autoloader --no-dev --prefer-dist --no-interaction; then
+    echo "✓ Composer dependencies installed successfully!"
+elif sudo -u www-data composer $INSTALL_CMD --prefer-dist --no-interaction; then
+    echo "✓ Composer dependencies installed (with dev packages)!"
+elif sudo -u www-data composer $INSTALL_CMD --prefer-source --no-interaction; then
+    echo "✓ Composer dependencies installed from source!"
+else
+    echo "⚠️ Standard composer install failed, trying manual approach..."
+    # Last resort: try with timeout and verbose output
+    sudo -u www-data composer $INSTALL_CMD --prefer-dist --no-interaction -vvv --timeout=0 || {
+        echo "❌ Composer installation failed completely."
+        echo "This might be due to:"
+        echo "1. Network connectivity issues"
+        echo "2. GitHub rate limiting (consider adding a GitHub token)"
+        echo "3. Server resource constraints"
+        echo ""
+        if confirm "Do you want to continue without composer dependencies? (Not recommended)"; then
+            echo "Continuing without dependencies - you'll need to run 'composer install' manually later"
+        else
+            error_exit "Failed to install Composer dependencies"
+        fi
+    }
+fi
 
 # Setup environment file
 echo "Setting up environment file..."
