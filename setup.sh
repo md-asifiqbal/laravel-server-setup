@@ -13,10 +13,10 @@
 # - Laravel optimization
 # - Production-ready configurations
 #
-# Fork Repository: https://github.com/theihasan/server-setup
+# Fork Repository: https://github.com/theihasan/laravel-server-setup
 #############################################################################
 
-# Fix for piped execution - redirect stdin from TTY if available
+
 if [ ! -t 0 ]; then
     if [ -t 1 ]; then
         exec < /dev/tty
@@ -29,18 +29,18 @@ if [ ! -t 0 ]; then
         echo "Please use one of these methods instead:"
         echo ""
         echo "Method 1 (Recommended):"
-        echo "  curl -fsSL https://raw.githubusercontent.com/theihasan/server-setup/main/lamp.sh -o setup.sh"
+        echo "  curl -fsSL https://raw.githubusercontent.com/theihasan/laravel-server-setup/main/setup.sh -o setup.sh"
         echo "  chmod +x setup.sh"
         echo "  ./setup.sh"
         echo ""
         echo "Method 2:"
-        echo "  bash <(curl -fsSL https://raw.githubusercontent.com/theihasan/server-setup/main/lamp.sh)"
+        echo "  bash <(curl -fsSL https://raw.githubusercontent.com/theihasan/laravel-server-setup/main/setup.sh)"
         echo ""
         exit 1
     fi
 fi
 
-# Enhanced read function with better error handling
+
 safe_read() {
     local prompt="$1"
     local default="$2"
@@ -130,7 +130,7 @@ select_database() {
     esac
 }
 
-# Function to prompt for database credentials
+
 get_database_credentials() {
     if [ "$DB_TYPE" = "mysql" ]; then
         read -p "Enter MySQL username (default: admin): " DB_USER
@@ -634,15 +634,38 @@ HASH=$(curl -sS https://composer.github.io/installer.sig)
 php -r "if (hash_file('SHA384', '/tmp/composer-setup.php') === '$HASH') { echo 'Installer verified'; } else { echo 'Installer corrupt'; unlink('composer-setup.php'); } echo PHP_EOL;"
 sudo php /tmp/composer-setup.php --install-dir=/usr/local/bin --filename=composer
 
+# Function to safely set composer config
+safe_composer_config() {
+    local key="$1"
+    local value="$2"
+    local scope="${3:---global}"
+
+    # Try to set the config and capture any errors
+    if sudo -u www-data composer config $scope "$key" "$value" 2>/dev/null; then
+        echo "✓ Set $key = $value"
+    else
+        echo "⚠ Skipping unsupported config: $key (not available in this Composer version)"
+    fi
+}
+
 # Configure composer globally for better performance
 echo "Configuring Composer for optimal performance..."
 sudo mkdir -p /var/www/.composer
 sudo chown -R www-data:www-data /var/www/.composer
 
-# Set global composer configurations
-sudo -u www-data composer config --global process-timeout 2000
-sudo -u www-data composer config --global cache-read-only false
-sudo -u www-data composer config --global htaccess-protect false
+# Get composer version for compatibility checks
+COMPOSER_VERSION=$(sudo -u www-data composer --version 2>/dev/null | grep -oP '\d+\.\d+\.\d+' | head -1)
+echo "Detected Composer version: $COMPOSER_VERSION"
+
+# Set basic configurations that work across versions
+safe_composer_config "process-timeout" "2000"
+
+# Try to set cache configurations (may not work on all versions)
+safe_composer_config "cache-files-maxsize" "1GB"
+
+# Set other useful configurations
+safe_composer_config "sort-packages" "true"
+safe_composer_config "optimize-autoloader" "true"
 
 # Setup GitHub token for better API limits
 setup_github_token
@@ -813,11 +836,22 @@ sudo chown -R www-data:www-data /var/www/.cache
 sudo chown -R www-data:www-data /var/www/.config
 
 # Set composer configuration to avoid GitHub API rate limits and improve performance
-sudo -u www-data composer config --global process-timeout 2000
-sudo -u www-data composer config --global repos.packagist composer https://packagist.org
-sudo -u www-data composer config --global cache-files-maxsize 1GB
-sudo -u www-data composer config --global cache-repo-dir /var/www/.cache/composer/repo
-sudo -u www-data composer config --global cache-files-dir /var/www/.cache/composer/files
+echo "Setting up Composer package repository and cache..."
+
+# Essential configurations that should work on most Composer versions
+echo "Setting essential Composer configurations..."
+sudo -u www-data composer config --global process-timeout 2000 || echo "⚠ Could not set process timeout"
+
+# Try optional configurations
+echo "Setting optional Composer optimizations..."
+safe_composer_config "repos.packagist" "composer https://packagist.org"
+safe_composer_config "cache-files-maxsize" "1GB"
+safe_composer_config "cache-repo-dir" "/var/www/.cache/composer/repo"
+safe_composer_config "cache-files-dir" "/var/www/.cache/composer/files"
+safe_composer_config "sort-packages" "true"
+safe_composer_config "optimize-autoloader" "true"
+
+echo "Composer configuration completed."
 
 # Check if composer.lock exists to determine installation method
 if [ -f "composer.lock" ]; then
@@ -963,14 +997,204 @@ sudo -u www-data php artisan cache:clear
 sudo -u www-data php artisan view:clear
 sudo -u www-data php artisan route:clear
 
-# Cache configuration for production
-sudo -u www-data php artisan config:cache
-sudo -u www-data php artisan route:cache
-sudo -u www-data php artisan view:cache
-
 # Create storage link
 echo "Creating storage symbolic link..."
 sudo -u www-data php artisan storage:link || echo "Storage link already exists or failed to create"
+
+# Handle NPM dependencies and build process
+handle_npm_build() {
+    echo ""
+    echo "=== Frontend Assets Setup ==="
+
+    # Check if package.json exists
+    if [ -f "package.json" ]; then
+        echo "✓ Found package.json - Frontend dependencies available"
+
+        # Detect frontend framework/build tools
+        echo "Detecting frontend setup..."
+        if grep -q "vite" package.json; then
+            echo "  📦 Detected: Vite (Laravel's default)"
+            BUILD_TOOL="vite"
+        elif grep -q "webpack" package.json; then
+            echo "  📦 Detected: Webpack/Laravel Mix"
+            BUILD_TOOL="webpack"
+        elif grep -q "react" package.json; then
+            echo "  ⚛️ Detected: React components"
+        elif grep -q "vue" package.json; then
+            echo "  🟢 Detected: Vue.js components"
+        fi
+
+        # Show available scripts
+        echo ""
+        echo "Available NPM scripts:"
+        if command -v jq >/dev/null 2>&1 || sudo apt install -y jq >/dev/null 2>&1; then
+            # Use jq if available for better formatting
+            jq -r '.scripts // {} | to_entries[] | "  - \(.key): \(.value)"' package.json 2>/dev/null || {
+                echo "  - Check package.json for available scripts"
+            }
+        else
+            # Fallback: simple grep
+            grep -A 10 '"scripts"' package.json | grep '"' | head -10 | sed 's/^/  /' || echo "  - Unable to parse scripts"
+        fi
+
+        echo ""
+        if confirm "Do you want to install NPM dependencies and build assets?"; then
+
+            # Install dependencies with progress
+            echo "Installing NPM dependencies (this may take a few minutes)..."
+            echo "Progress will be shown below:"
+
+            if sudo -u www-data npm install --progress=true; then
+                echo "✓ NPM dependencies installed successfully"
+
+                echo ""
+                echo "Build Options:"
+                if [ "$BUILD_TOOL" = "vite" ]; then
+                    echo "1) npm run build (Vite production build - recommended)"
+                    echo "2) npm run dev (Vite development build)"
+                elif [ "$BUILD_TOOL" = "webpack" ]; then
+                    echo "1) npm run prod (Webpack production build - recommended)"
+                    echo "2) npm run dev (Webpack development build)"
+                else
+                    echo "1) npm run build (production build - recommended)"
+                    echo "2) npm run dev (development build)"
+                    echo "3) npm run prod (production build - alternative)"
+                fi
+                echo "4) Custom build command"
+                echo "5) Skip build process"
+
+                safe_read "Select build option (1-5)" "1" build_choice
+
+                case $build_choice in
+                    1)
+                        if [ "$BUILD_TOOL" = "webpack" ]; then
+                            echo "Running Webpack production build..."
+                            sudo -u www-data npm run prod
+                        else
+                            echo "Running production build..."
+                            sudo -u www-data npm run build || sudo -u www-data npm run prod
+                        fi
+
+                        if [ $? -eq 0 ]; then
+                            echo "✓ Production build completed successfully"
+
+                            # Check if public assets were created
+                            if [ -d "public/build" ] || [ -d "public/js" ] || [ -d "public/css" ]; then
+                                echo "✓ Built assets found in public directory"
+                            fi
+                        else
+                            echo "❌ Production build failed"
+                        fi
+                        ;;
+                    2)
+                        echo "Running development build..."
+                        if sudo -u www-data npm run dev; then
+                            echo "✓ Development build completed"
+                        else
+                            echo "❌ Development build failed"
+                        fi
+                        ;;
+                    3)
+                        if [ "$BUILD_TOOL" != "webpack" ]; then
+                            echo "Running production build (alternative)..."
+                            sudo -u www-data npm run prod || echo "❌ Production build failed"
+                        else
+                            echo "Option 3 not applicable for detected setup"
+                        fi
+                        ;;
+                    4)
+                        safe_read "Enter custom build command (e.g., 'npm run custom')" "npm run build" custom_cmd
+                        echo "Running: $custom_cmd"
+                        sudo -u www-data $custom_cmd || echo "❌ Custom build command failed"
+                        ;;
+                    5)
+                        echo "Skipping build process"
+                        ;;
+                    *)
+                        echo "Invalid option, skipping build"
+                        ;;
+                esac
+
+                # Optional: Development watching
+                if [ "$build_choice" = "2" ] && [ "$BUILD_TOOL" = "vite" ]; then
+                    echo ""
+                    echo "💡 For development with Vite:"
+                    echo "   Run 'npm run dev' to start the development server"
+                    echo "   It will be available at http://localhost:5173"
+                elif [ "$build_choice" = "2" ]; then
+                    echo ""
+                    if confirm "Do you want to set up file watching for development? (runs in background)"; then
+                        echo "Setting up file watcher..."
+                        nohup sudo -u www-data npm run watch > /var/log/npm-watch.log 2>&1 &
+                        WATCH_PID=$!
+                        echo "✓ File watcher started (PID: $WATCH_PID)"
+                        echo "  - Logs: tail -f /var/log/npm-watch.log"
+                        echo "  - Stop: kill $WATCH_PID"
+                    fi
+                fi
+
+            else
+                echo "❌ NPM install failed"
+                echo ""
+                echo "Common solutions:"
+                echo "  1. Node version compatibility issues"
+                echo "  2. Network connectivity problems"
+                echo "  3. Permission issues"
+                echo "  4. Dependency conflicts"
+                echo ""
+                if confirm "Do you want to try alternative install methods?"; then
+                    echo "Trying with legacy peer deps..."
+                    if sudo -u www-data npm install --legacy-peer-deps; then
+                        echo "✓ NPM install succeeded with legacy peer deps"
+                    else
+                        echo "Trying with force flag..."
+                        if sudo -u www-data npm install --force; then
+                            echo "✓ NPM install succeeded with force flag"
+                        else
+                            echo "❌ All NPM install methods failed"
+                            echo ""
+                            echo "Manual troubleshooting steps:"
+                            echo "  cd /var/www/html/$REPO_NAME"
+                            echo "  sudo -u www-data npm cache clean --force"
+                            echo "  sudo -u www-data rm -rf node_modules package-lock.json"
+                            echo "  sudo -u www-data npm install"
+                        fi
+                    fi
+                fi
+            fi
+        else
+            echo "Skipping NPM setup."
+            echo ""
+            echo "To set up frontend assets manually later:"
+            echo "  cd /var/www/html/$REPO_NAME"
+            echo "  sudo -u www-data npm install"
+            if [ "$BUILD_TOOL" = "vite" ]; then
+                echo "  sudo -u www-data npm run build    # For production"
+                echo "  sudo -u www-data npm run dev      # For development"
+            elif [ "$BUILD_TOOL" = "webpack" ]; then
+                echo "  sudo -u www-data npm run prod     # For production"
+                echo "  sudo -u www-data npm run dev      # For development"
+            else
+                echo "  sudo -u www-data npm run build    # For production"
+            fi
+        fi
+    else
+        echo "ℹ No package.json found - skipping NPM setup"
+        echo "This is normal for:"
+        echo "  - Backend-only Laravel applications"
+        echo "  - APIs without frontend assets"
+        echo "  - Applications using CDN assets"
+    fi
+}
+
+# Run NPM setup
+handle_npm_build
+
+# Cache configuration for production
+echo "Optimizing Laravel for production..."
+sudo -u www-data php artisan config:cache
+sudo -u www-data php artisan route:cache
+sudo -u www-data php artisan view:cache
 
 # Get domain name
 read -p "Enter your domain name (e.g., example.com): " DOMAIN_NAME
@@ -1112,6 +1336,18 @@ echo "Database Name: ${DB_NAME}"
 echo "Node.js Version: ${NODE_VERSION:-Not installed}"
 echo "Domain: ${DOMAIN_NAME}"
 echo "Project Path: /var/www/html/${REPO_NAME}"
+
+# Check if NPM build was successful
+if [ -f "/var/www/html/${REPO_NAME}/package.json" ]; then
+    if [ -d "/var/www/html/${REPO_NAME}/public/build" ] || [ -d "/var/www/html/${REPO_NAME}/public/js" ] || [ -d "/var/www/html/${REPO_NAME}/public/css" ]; then
+        echo "Frontend Assets: ✓ Built and ready"
+    else
+        echo "Frontend Assets: ⚠ May need manual build"
+    fi
+else
+    echo "Frontend Assets: Not applicable (no package.json)"
+fi
+
 echo ""
 echo "Services Status:"
 echo "- Web Server: Running"
@@ -1124,6 +1360,9 @@ echo "- Supervisor: Running"
 if [ -x "$(command -v redis-server)" ]; then
     echo "- Redis: Running"
 fi
+if [ -x "$(command -v node)" ]; then
+    echo "- Node.js: Installed"
+fi
 
 echo ""
 echo "Next Steps:"
@@ -1131,10 +1370,27 @@ echo "1. Configure your domain's DNS to point to this server"
 echo "2. Test your application at http://${DOMAIN_NAME}"
 echo "3. Monitor queue workers: sudo supervisorctl status"
 echo "4. Check application logs: tail -f /var/www/html/${REPO_NAME}/storage/logs/laravel.log"
+
+# Add frontend-specific next steps
+if [ -f "/var/www/html/${REPO_NAME}/package.json" ]; then
+    echo ""
+    echo "Frontend Development Commands:"
+    if grep -q "vite" "/var/www/html/${REPO_NAME}/package.json"; then
+        echo "  npm run dev      # Start Vite development server"
+        echo "  npm run build    # Build for production"
+    else
+        echo "  npm run dev      # Development build"
+        echo "  npm run watch    # Watch for changes"
+        echo "  npm run build    # Production build"
+    fi
+fi
+
 echo ""
 echo "Important Files:"
 echo "- Environment: /var/www/html/${REPO_NAME}/.env"
-echo "- Queue Config: /etc/supervisor/conf.d/${REPO_NAME}_queue.conf"
+if [ -f "/etc/supervisor/conf.d/${REPO_NAME}_"*".conf" ]; then
+    echo "- Queue Configs: /etc/supervisor/conf.d/${REPO_NAME}_*.conf"
+fi
 if [ "$web_server_choice" = "1" ]; then
     echo "- Apache Config: /etc/apache2/sites-available/${DOMAIN_NAME}.conf"
 else
@@ -1143,3 +1399,6 @@ fi
 
 echo ""
 echo "🎉 Your Laravel application is ready to use!"
+if [ -f "/var/www/html/${REPO_NAME}/package.json" ]; then
+    echo "💡 Frontend assets have been set up and built for optimal performance!"
+fi
