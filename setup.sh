@@ -166,60 +166,294 @@ install_supervisor() {
     echo "Supervisor installed and started successfully!"
 }
 
-# Function to create Laravel queue configuration for Supervisor
-create_queue_config() {
+# Function to get server specifications for process recommendations
+get_server_specs() {
+    echo "Analyzing server specifications..."
+
+    # Get CPU cores
+    CPU_CORES=$(nproc)
+
+    # Get RAM in GB
+    RAM_GB=$(free -g | awk '/^Mem:/{print $2}')
+
+    # Get available RAM in GB
+    AVAILABLE_RAM_GB=$(free -g | awk '/^Mem:/{print $7}')
+
+    echo "Server Specifications:"
+    echo "- CPU Cores: $CPU_CORES"
+    echo "- Total RAM: ${RAM_GB}GB"
+    echo "- Available RAM: ${AVAILABLE_RAM_GB}GB"
+
+    # Calculate recommended processes
+    if [ "$RAM_GB" -ge 8 ] && [ "$CPU_CORES" -ge 4 ]; then
+        RECOMMENDED_PROCESSES=$((CPU_CORES * 2))
+        SERVER_TYPE="High-performance"
+    elif [ "$RAM_GB" -ge 4 ] && [ "$CPU_CORES" -ge 2 ]; then
+        RECOMMENDED_PROCESSES=$CPU_CORES
+        SERVER_TYPE="Medium-performance"
+    else
+        RECOMMENDED_PROCESSES=2
+        SERVER_TYPE="Basic"
+    fi
+
+    echo "- Server Type: $SERVER_TYPE"
+    echo "- Recommended Queue Processes: $RECOMMENDED_PROCESSES"
+    echo ""
+}
+
+# Function to configure queue driver selection
+configure_queue_driver() {
+    echo "Queue Driver Configuration:"
+    echo "1) Database (default) - Simple, no additional setup"
+    echo "2) Redis - Fast, recommended for production"
+    echo "3) Both - Database as fallback, Redis as primary"
+
+    read -p "Select queue driver (1-3, default: 1): " queue_driver_choice
+    queue_driver_choice=${queue_driver_choice:-1}
+
+    case $queue_driver_choice in
+        1)
+            QUEUE_DRIVER="database"
+            echo "Selected: Database queue driver"
+            ;;
+        2)
+            QUEUE_DRIVER="redis"
+            INSTALL_REDIS_FOR_QUEUE=true
+            echo "Selected: Redis queue driver"
+            ;;
+        3)
+            QUEUE_DRIVER="redis"
+            QUEUE_FALLBACK="database"
+            INSTALL_REDIS_FOR_QUEUE=true
+            echo "Selected: Redis with database fallback"
+            ;;
+        *)
+            error_exit "Invalid queue driver selection"
+            ;;
+    esac
+}
+
+# Function to configure session and cache drivers
+configure_cache_session_drivers() {
+    echo ""
+    echo "Cache & Session Driver Configuration:"
+    echo "Current selection: Queue = $QUEUE_DRIVER"
+
+    # Cache driver selection
+    echo ""
+    echo "Cache Driver Options:"
+    echo "1) File (default) - Simple file-based caching"
+    echo "2) Redis - Fast in-memory caching (recommended)"
+    echo "3) Database - Store cache in database"
+
+    read -p "Select cache driver (1-3, default: 1): " cache_driver_choice
+    cache_driver_choice=${cache_driver_choice:-1}
+
+    case $cache_driver_choice in
+        1) CACHE_DRIVER="file" ;;
+        2)
+            CACHE_DRIVER="redis"
+            INSTALL_REDIS_FOR_CACHE=true
+            ;;
+        3) CACHE_DRIVER="database" ;;
+        *) CACHE_DRIVER="file" ;;
+    esac
+
+    # Session driver selection
+    echo ""
+    echo "Session Driver Options:"
+    echo "1) File (default) - Store sessions in files"
+    echo "2) Redis - Fast session storage (recommended for multiple servers)"
+    echo "3) Database - Store sessions in database"
+
+    read -p "Select session driver (1-3, default: 1): " session_driver_choice
+    session_driver_choice=${session_driver_choice:-1}
+
+    case $session_driver_choice in
+        1) SESSION_DRIVER="file" ;;
+        2)
+            SESSION_DRIVER="redis"
+            INSTALL_REDIS_FOR_SESSION=true
+            ;;
+        3) SESSION_DRIVER="database" ;;
+        *) SESSION_DRIVER="file" ;;
+    esac
+
+    # Determine if Redis is needed
+    if [ "$INSTALL_REDIS_FOR_QUEUE" = true ] || [ "$INSTALL_REDIS_FOR_CACHE" = true ] || [ "$INSTALL_REDIS_FOR_SESSION" = true ]; then
+        INSTALL_REDIS=true
+    fi
+
+    echo ""
+    echo "Selected Configuration:"
+    echo "- Queue Driver: $QUEUE_DRIVER"
+    echo "- Cache Driver: $CACHE_DRIVER"
+    echo "- Session Driver: $SESSION_DRIVER"
+    if [ "$INSTALL_REDIS" = true ]; then
+        echo "- Redis: Will be installed"
+    fi
+}
+
+# Function to create multiple queue configurations for Supervisor
+create_advanced_queue_config() {
     local project_path="/var/www/html/$REPO_NAME"
-    local queue_name="${REPO_NAME}_queue"
-    local config_file="/etc/supervisor/conf.d/${queue_name}.conf"
 
-    echo "Creating Laravel Queue configuration for Supervisor..."
+    echo ""
+    echo "=== Advanced Queue Configuration ==="
 
-    # Get queue configuration details
-    read -p "Enter number of queue workers (default: 3): " num_workers
-    num_workers=${num_workers:-3}
+    # Get server specs and recommendations
+    get_server_specs
 
-    read -p "Enter queue connection (default: database): " queue_connection
-    queue_connection=${queue_connection:-database}
+    # Configure drivers
+    configure_queue_driver
+    configure_cache_session_drivers
 
-    read -p "Enter queue name (default: default): " queue_name_config
-    queue_name_config=${queue_name_config:-default}
+    echo ""
+    echo "=== Queue Workers Setup ==="
 
-    # Create supervisor configuration file
-    sudo tee "$config_file" << EOF
-[program:${queue_name}]
+    # Ask for number of different queues
+    read -p "How many different queue types do you want to configure? (default: 1): " num_queue_types
+    num_queue_types=${num_queue_types:-1}
+
+    # Array to store queue configurations
+    declare -a QUEUE_CONFIGS
+
+    for ((i=1; i<=num_queue_types; i++)); do
+        echo ""
+        echo "--- Queue Type $i Configuration ---"
+
+        if [ $i -eq 1 ]; then
+            default_queue_name="default"
+            default_processes=$RECOMMENDED_PROCESSES
+        else
+            default_queue_name="queue$i"
+            default_processes=2
+        fi
+
+        read -p "Queue name (default: $default_queue_name): " queue_name
+        queue_name=${queue_name:-$default_queue_name}
+
+        echo ""
+        echo "Process Recommendations for '$queue_name' queue:"
+        echo "- Light workload (emails, notifications): 1-2 processes"
+        echo "- Medium workload (file processing, API calls): 3-5 processes"
+        echo "- Heavy workload (image processing, reports): 5+ processes"
+        echo "- Your server can handle up to $RECOMMENDED_PROCESSES processes efficiently"
+
+        read -p "Number of processes for '$queue_name' (recommended: $default_processes): " processes
+        processes=${processes:-$default_processes}
+
+        # Validate process count
+        if [ "$processes" -gt $((RECOMMENDED_PROCESSES * 2)) ]; then
+            echo "Warning: $processes processes might overload your server!"
+            if ! confirm "Continue with $processes processes?"; then
+                processes=$RECOMMENDED_PROCESSES
+                echo "Reset to recommended: $processes processes"
+            fi
+        fi
+
+        read -p "Priority for '$queue_name' (1=highest, 5=lowest, default: 3): " priority
+        priority=${priority:-3}
+
+        read -p "Max execution time in seconds (default: 3600): " max_time
+        max_time=${max_time:-3600}
+
+        # Store configuration
+        QUEUE_CONFIGS+=("$queue_name:$processes:$priority:$max_time")
+
+        echo "✓ Queue '$queue_name': $processes processes, priority $priority, max time ${max_time}s"
+    done
+
+    echo ""
+    echo "Creating Supervisor configurations..."
+
+    # Create supervisor config for each queue
+    for config in "${QUEUE_CONFIGS[@]}"; do
+        IFS=':' read -r queue_name processes priority max_time <<< "$config"
+
+        config_file="/etc/supervisor/conf.d/${REPO_NAME}_${queue_name}.conf"
+
+        # Set priority (lower number = higher priority)
+        supervisor_priority=$((990 + priority * 10))
+
+        sudo tee "$config_file" << EOF
+[program:${REPO_NAME}_${queue_name}]
 process_name=%(program_name)s_%(process_num)02d
-command=php ${project_path}/artisan queue:work ${queue_connection} --queue=${queue_name_config} --sleep=3 --tries=3 --max-time=3600
+command=php ${project_path}/artisan queue:work ${QUEUE_DRIVER} --queue=${queue_name} --sleep=3 --tries=3 --max-time=${max_time} --timeout=$((max_time + 60))
 autostart=true
 autorestart=true
 stopasgroup=true
 killasgroup=true
-numprocs=${num_workers}
+numprocs=${processes}
 redirect_stderr=true
-stdout_logfile=${project_path}/storage/logs/queue.log
-stopwaitsecs=3600
+stdout_logfile=${project_path}/storage/logs/queue_${queue_name}.log
+stopwaitsecs=$((max_time + 120))
 user=www-data
+priority=${supervisor_priority}
 EOF
 
-    # Create log file if it doesn't exist
-    sudo touch "${project_path}/storage/logs/queue.log"
-    sudo chown www-data:www-data "${project_path}/storage/logs/queue.log"
+        # Create log file
+        sudo touch "${project_path}/storage/logs/queue_${queue_name}.log"
+        sudo chown www-data:www-data "${project_path}/storage/logs/queue_${queue_name}.log"
 
-    # Update supervisor configuration
+        echo "✓ Created config for '$queue_name' queue"
+    done
+
+    # Create a master queue monitor script
+    sudo tee "/usr/local/bin/queue-monitor" << 'EOF'
+#!/bin/bash
+echo "=== Laravel Queue Status ==="
+echo "Date: $(date)"
+echo ""
+
+echo "Supervisor Status:"
+sudo supervisorctl status | grep queue
+
+echo ""
+echo "Queue Statistics:"
+if command -v redis-cli &> /dev/null; then
+    echo "Redis Queue Length: $(redis-cli llen queues:default)"
+fi
+
+echo ""
+echo "Recent Queue Logs:"
+find /var/www/html/*/storage/logs -name "queue_*.log" -exec tail -5 {} \; 2>/dev/null
+EOF
+
+    sudo chmod +x /usr/local/bin/queue-monitor
+
+    # Update supervisor
     sudo supervisorctl reread
     sudo supervisorctl update
-    sudo supervisorctl start "${queue_name}:*"
 
-    echo "Laravel Queue configuration created successfully!"
-    echo "Queue workers: $num_workers"
-    echo "Queue connection: $queue_connection"
-    echo "Queue name: $queue_name_config"
-    echo "Log file: ${project_path}/storage/logs/queue.log"
+    # Start all queue workers
+    for config in "${QUEUE_CONFIGS[@]}"; do
+        IFS=':' read -r queue_name processes priority max_time <<< "$config"
+        sudo supervisorctl start "${REPO_NAME}_${queue_name}:*"
+    done
+
     echo ""
-    echo "Useful Supervisor commands:"
-    echo "  sudo supervisorctl status ${queue_name}:*    # Check queue status"
-    echo "  sudo supervisorctl restart ${queue_name}:*   # Restart queue workers"
-    echo "  sudo supervisorctl stop ${queue_name}:*      # Stop queue workers"
-    echo "  sudo supervisorctl start ${queue_name}:*     # Start queue workers"
+    echo "🎉 Queue configuration completed successfully!"
+    echo ""
+    echo "Queue Summary:"
+    for config in "${QUEUE_CONFIGS[@]}"; do
+        IFS=':' read -r queue_name processes priority max_time <<< "$config"
+        echo "  ✓ $queue_name: $processes workers (priority: $priority, timeout: ${max_time}s)"
+    done
+
+    echo ""
+    echo "Useful Commands:"
+    echo "  queue-monitor                              # Check queue status"
+    echo "  sudo supervisorctl status                  # All supervisor processes"
+    echo "  sudo supervisorctl restart ${REPO_NAME}_*  # Restart all queues"
+    echo "  sudo supervisorctl stop ${REPO_NAME}_*     # Stop all queues"
+    echo "  sudo supervisorctl start ${REPO_NAME}_*    # Start all queues"
+    echo ""
+    echo "Queue Logs:"
+    for config in "${QUEUE_CONFIGS[@]}"; do
+        IFS=':' read -r queue_name processes priority max_time <<< "$config"
+        echo "  tail -f ${project_path}/storage/logs/queue_${queue_name}.log"
+    done
 }
 
 # Update system
@@ -423,6 +657,21 @@ elif [ ! -f ".env" ]; then
         DB_PORT="5432"
     fi
 
+    # Set default queue driver
+    if [ -z "$QUEUE_DRIVER" ]; then
+        QUEUE_DRIVER="database"
+    fi
+
+    # Set default cache driver
+    if [ -z "$CACHE_DRIVER" ]; then
+        CACHE_DRIVER="file"
+    fi
+
+    # Set default session driver
+    if [ -z "$SESSION_DRIVER" ]; then
+        SESSION_DRIVER="file"
+    fi
+
     sudo tee .env << EOF
 APP_NAME=Laravel
 APP_ENV=production
@@ -441,11 +690,15 @@ DB_USERNAME=${DB_USER}
 DB_PASSWORD=${DB_PASS}
 
 BROADCAST_DRIVER=log
-CACHE_DRIVER=file
+CACHE_DRIVER=${CACHE_DRIVER}
 FILESYSTEM_DISK=local
-QUEUE_CONNECTION=database
-SESSION_DRIVER=file
+QUEUE_CONNECTION=${QUEUE_DRIVER}
+SESSION_DRIVER=${SESSION_DRIVER}
 SESSION_LIFETIME=120
+
+REDIS_HOST=127.0.0.1
+REDIS_PASSWORD=null
+REDIS_PORT=6379
 EOF
 fi
 
@@ -457,7 +710,7 @@ sudo chmod 644 .env
 echo "Generating application key..."
 sudo -u www-data php artisan key:generate || error_exit "Failed to generate application key"
 
-# Update database credentials in .env
+# Update database and driver credentials in .env
 if [ "$DB_TYPE" = "mysql" ]; then
     sudo sed -i "s/DB_CONNECTION=.*/DB_CONNECTION=mysql/" .env
     sudo sed -i "s/DB_PORT=.*/DB_PORT=3306/" .env
@@ -469,6 +722,19 @@ fi
 sudo sed -i "s/DB_DATABASE=.*/DB_DATABASE=${DB_NAME}/" .env
 sudo sed -i "s/DB_USERNAME=.*/DB_USERNAME=${DB_USER}/" .env
 sudo sed -i "s/DB_PASSWORD=.*/DB_PASSWORD=${DB_PASS}/" .env
+
+# Update driver configurations if they were set
+if [ ! -z "$QUEUE_DRIVER" ]; then
+    sudo sed -i "s/QUEUE_CONNECTION=.*/QUEUE_CONNECTION=${QUEUE_DRIVER}/" .env
+fi
+
+if [ ! -z "$CACHE_DRIVER" ]; then
+    sudo sed -i "s/CACHE_DRIVER=.*/CACHE_DRIVER=${CACHE_DRIVER}/" .env
+fi
+
+if [ ! -z "$SESSION_DRIVER" ]; then
+    sudo sed -i "s/SESSION_DRIVER=.*/SESSION_DRIVER=${SESSION_DRIVER}/" .env
+fi
 
 # Run database migrations
 if confirm "Do you want to run database migrations?"; then
@@ -581,21 +847,22 @@ fi
 
 # Configure Laravel Queue with Supervisor (optional)
 if confirm "Do you want to configure Laravel Queue with Supervisor?"; then
-    create_queue_config
+    create_advanced_queue_config
 fi
 
-# Install Redis (optional, recommended for queues and caching)
-if confirm "Do you want to install Redis for caching and queues?"; then
+# Install Redis if needed (based on driver selection or user choice)
+if [ "$INSTALL_REDIS" = true ]; then
+    echo "Installing Redis (required for selected drivers)..."
+    sudo apt install -y redis-server || error_exit "Failed to install Redis"
+    sudo systemctl enable redis-server
+    sudo systemctl start redis-server
+    echo "✓ Redis installed and configured for your selected drivers!"
+elif confirm "Do you want to install Redis for future use (caching/sessions/queues)?"; then
     echo "Installing Redis..."
     sudo apt install -y redis-server || error_exit "Failed to install Redis"
     sudo systemctl enable redis-server
     sudo systemctl start redis-server
-
-    # Update .env to use Redis for cache and sessions
-    sudo sed -i "s/CACHE_DRIVER=.*/CACHE_DRIVER=redis/" .env
-    sudo sed -i "s/SESSION_DRIVER=.*/SESSION_DRIVER=redis/" .env
-
-    echo "Redis installed and configured!"
+    echo "✓ Redis installed and ready for use!"
 fi
 
 # Final permission fix
