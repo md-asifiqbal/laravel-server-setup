@@ -29,12 +29,12 @@ if [ ! -t 0 ]; then
         echo "Please use one of these methods instead:"
         echo ""
         echo "Method 1 (Recommended):"
-        echo "  curl -fsSL https://raw.githubusercontent.com/theihasan/laravel-server-setup/main/setup.sh -o setup.sh"
+        echo "  curl -fsSL https://raw.githubusercontent.com/theihasan/server-setup/main/lamp.sh -o setup.sh"
         echo "  chmod +x setup.sh"
         echo "  ./setup.sh"
         echo ""
         echo "Method 2:"
-        echo "  bash <(curl -fsSL https://raw.githubusercontent.com/theihasan/laravel-server-setup/main/setup.sh)"
+        echo "  bash <(curl -fsSL https://raw.githubusercontent.com/theihasan/server-setup/main/lamp.sh)"
         echo ""
         exit 1
     fi
@@ -690,19 +690,106 @@ fi
 # Install Supervisor
 install_supervisor
 
+# Check for existing installations
+check_existing_installation
+
 # Get project details
-read -p "Enter GitHub repository URL: " REPO_URL
+safe_read "Enter GitHub repository URL" "" REPO_URL
 
 # Navigate to web root
 cd /var/www/html
 
-# Clone the repository
-echo "Cloning repository..."
-sudo git clone "$REPO_URL" || error_exit "Failed to clone repository"
-
-# Get the repository name from URL and cd into it
+# Get the repository name from URL
 REPO_NAME=$(basename "$REPO_URL" .git)
-cd "$REPO_NAME"
+
+# Check if directory already exists
+if [ -d "$REPO_NAME" ]; then
+    echo ""
+    echo "⚠️  Directory '$REPO_NAME' already exists!"
+    echo "This might be from a previous installation attempt."
+    echo ""
+    echo "Options:"
+    echo "1) Remove existing directory and clone fresh (recommended)"
+    echo "2) Keep existing directory and update it"
+    echo "3) Use a different directory name"
+    echo "4) Exit and handle manually"
+
+    safe_read "Select option (1-4)" "1" clone_option
+
+    case $clone_option in
+        1)
+            echo "Removing existing directory and cloning fresh..."
+            if confirm "Are you sure you want to delete /var/www/html/$REPO_NAME? This cannot be undone!"; then
+                sudo rm -rf "$REPO_NAME"
+                sudo git clone "$REPO_URL" || error_exit "Failed to clone repository"
+                echo "✓ Fresh repository cloned successfully"
+            else
+                echo "Cancelled. Exiting to avoid data loss."
+                exit 0
+            fi
+            ;;
+        2)
+            echo "Keeping existing directory and updating..."
+            cd "$REPO_NAME"
+            if [ -d ".git" ]; then
+                echo "Pulling latest changes..."
+                sudo git stash push -m "Auto-stash before script update $(date)" || true
+                sudo git pull origin main || sudo git pull origin master || {
+                    echo "Git pull failed. Continuing with existing code..."
+                    echo "You may need to resolve conflicts manually later."
+                }
+                echo "✓ Repository updated (existing files preserved)"
+            else
+                echo "Not a git repository, continuing with existing files..."
+                echo "✓ Using existing files"
+            fi
+            ;;
+        3)
+            safe_read "Enter new directory name" "${REPO_NAME}_new" NEW_REPO_NAME
+            if [ -d "$NEW_REPO_NAME" ]; then
+                error_exit "Directory '$NEW_REPO_NAME' also exists. Please choose a different name or clean up manually."
+            fi
+            REPO_NAME="$NEW_REPO_NAME"
+            sudo git clone "$REPO_URL" "$REPO_NAME" || error_exit "Failed to clone repository"
+            cd "$REPO_NAME"
+            echo "✓ Repository cloned to new directory: $REPO_NAME"
+            ;;
+        4)
+            echo "Exiting. To clean up manually, run:"
+            echo "  sudo rm -rf /var/www/html/$REPO_NAME"
+            echo "Then run this script again."
+            exit 0
+            ;;
+        *)
+            error_exit "Invalid option selected"
+            ;;
+    esac
+else
+    # Clone the repository normally
+    echo "Cloning repository..."
+    if sudo git clone "$REPO_URL"; then
+        cd "$REPO_NAME"
+        echo "✓ Repository cloned successfully"
+    else
+        echo ""
+        echo "Failed to clone repository. This could be due to:"
+        echo "1. Invalid repository URL"
+        echo "2. Repository is private (requires authentication)"
+        echo "3. Network connectivity issues"
+        echo "4. Repository doesn't exist"
+        echo ""
+        if confirm "Do you want to continue with manual repository setup?"; then
+            safe_read "Enter the directory name for your project" "myproject" REPO_NAME
+            sudo mkdir -p "$REPO_NAME"
+            cd "$REPO_NAME"
+            echo "✓ Empty project directory created. You'll need to add your code manually."
+        else
+            error_exit "Repository clone failed and manual setup declined"
+        fi
+    fi
+fi
+
+echo "✓ Repository ready at: /var/www/html/$REPO_NAME"
 
 # Set comprehensive permissions
 set_project_permissions
