@@ -338,9 +338,9 @@ This project is open source and available under the [MIT License](LICENSE).
 
 ## 🙋‍♂️ Support
 
-- **Issues**: [GitHub Issues](https://github.com/theihasan/server-setup/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/theihasan/server-setup/discussions)
-- **Email**: [your-email@domain.com]
+- **Issues**: [GitHub Issues](https://github.com/theihasan/laravel-server-setup/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/theihasan/laravel-server-setup/discussions)
+- **Email**: [imabulhasan99@gmail.com]
 
 ## ⭐ Show Your Support
 
