@@ -231,6 +231,23 @@ sudo chmod -R 755 /var/www/html/your-project
 sudo chmod -R 775 /var/www/html/your-project/storage
 sudo chmod -R 775 /var/www/html/your-project/bootstrap/cache
 ```
+# Build failures  
+sudo -u www-data npm run build --verbose
+sudo -u www-data npm run dev    # Try development build first
+
+# Check build output
+ls -la public/build/            # Vite builds
+ls -la public/js/ public/css/   # Webpack builds
+
+# Watch mode not working
+pkill -f "npm run watch"        # Kill existing watchers
+sudo -u www-data npm run watch  # Restart watch mode
+
+# Cache issues (ENOTEMPTY errors)
+sudo rm -rf /var/www/.npm
+sudo rm -rf node_modules
+sudo -u www-data npm install --no-cache
+```
 
 ### Queue Issues
 ```bash
@@ -247,6 +264,25 @@ sudo supervisorctl restart your-project_default:*
 redis-cli llen queues:default
 redis-cli llen queues:emails
 ```
+
+### Scheduler Issues
+```bash
+sudo -u www-data crontab -l | grep schedule:run
+
+# Test scheduler manually
+cd /var/www/html/your-project
+php artisan schedule:list
+php artisan schedule:run
+
+# Add scheduler manually if needed
+sudo -u www-data crontab -e
+# Add: * * * * * cd /var/www/html/your-project && php artisan schedule:run >> /dev/null 2>&1
+
+# Check scheduler logs
+tail -f storage/logs/laravel.log
+```
+# Check scheduler logs
+tail -f storage/logs/laravel.log
 
 ### Driver Issues
 ```bash

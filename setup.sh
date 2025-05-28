@@ -2,10 +2,10 @@
 
 #############################################################################
 # Enhanced LAMP Stack Setup Script
-#
+# 
 # Original Script: https://github.com/sohag-pro/SingleCommand
 # Original Author: @sohag-pro
-#
+# 
 # This is an enhanced fork with additional features:
 # - Supervisor integration for Laravel queues
 # - Comprehensive permission management
@@ -46,19 +46,19 @@ safe_read() {
     local default="$2"
     local var_name="$3"
     local response
-
+    
     if [ ! -t 0 ]; then
         echo "Error: Cannot read input in non-interactive mode"
         exit 1
     fi
-
+    
     if [ -n "$default" ]; then
         read -r -p "$prompt (default: $default): " response
         response=${response:-$default}
     else
         read -r -p "$prompt: " response
     fi
-
+    
     if [ -n "$var_name" ]; then
         eval "$var_name='$response'"
     else
@@ -76,7 +76,7 @@ error_exit() {
 confirm() {
     read -r -p "${1:-Are you sure?} [y/N] " response
     case "$response" in
-        [yY][eE][sS]|[yY])
+        [yY][eE][sS]|[yY]) 
             true
             ;;
         *)
@@ -95,7 +95,7 @@ select_php_version() {
     echo "5) PHP 8.3"
     echo "6) PHP 8.4"
     safe_read "Select PHP version (1-6)" "" php_choice
-
+    
     case $php_choice in
         1) PHP_VERSION="7.4" ;;
         2) PHP_VERSION="8.0" ;;
@@ -114,13 +114,13 @@ select_database() {
     echo "1) MySQL (default)"
     echo "2) PostgreSQL"
     safe_read "Select database system (1-2)" "1" db_choice
-
+    
     case $db_choice in
-        1)
+        1) 
             DB_TYPE="mysql"
             echo "Selected database: MySQL"
             ;;
-        2)
+        2) 
             DB_TYPE="postgresql"
             echo "Selected database: PostgreSQL"
             ;;
@@ -135,19 +135,19 @@ get_database_credentials() {
     if [ "$DB_TYPE" = "mysql" ]; then
         read -p "Enter MySQL username (default: admin): " DB_USER
         DB_USER=${DB_USER:-admin}
-
+        
         read -s -p "Enter MySQL password: " DB_PASS
         echo
-
+        
         read -p "Enter database name (default: mydatabase): " DB_NAME
         DB_NAME=${DB_NAME:-mydatabase}
     else
         read -p "Enter PostgreSQL username (default: postgres): " DB_USER
         DB_USER=${DB_USER:-postgres}
-
+        
         read -s -p "Enter PostgreSQL password: " DB_PASS
         echo
-
+        
         read -p "Enter database name (default: mydatabase): " DB_NAME
         DB_NAME=${DB_NAME:-mydatabase}
     fi
@@ -156,42 +156,42 @@ get_database_credentials() {
 # Function to set comprehensive permissions
 set_project_permissions() {
     local project_path="/var/www/html/$REPO_NAME"
-
+    
     echo "Setting comprehensive permissions for Laravel project..."
-
+    
     # Set ownership to www-data
     sudo chown -R www-data:www-data "$project_path"
-
+    
     # Set directory permissions
     sudo find "$project_path" -type d -exec chmod 755 {} \;
-
+    
     # Set file permissions
     sudo find "$project_path" -type f -exec chmod 644 {} \;
-
+    
     # Set executable permissions for artisan
     sudo chmod +x "$project_path/artisan"
-
+    
     # Set special permissions for storage and bootstrap/cache
     sudo chmod -R 775 "$project_path/storage"
     sudo chmod -R 775 "$project_path/bootstrap/cache"
-
+    
     # Ensure proper ownership for writable directories
     sudo chown -R www-data:www-data "$project_path/storage"
     sudo chown -R www-data:www-data "$project_path/bootstrap/cache"
-
+    
     # Set permissions for log files
     if [ -d "$project_path/storage/logs" ]; then
         sudo chmod -R 775 "$project_path/storage/logs"
         sudo chown -R www-data:www-data "$project_path/storage/logs"
     fi
-
+    
     # Create public uploads directory if it doesn't exist and set permissions
     if [ ! -d "$project_path/public/uploads" ]; then
         sudo mkdir -p "$project_path/public/uploads"
     fi
     sudo chmod -R 775 "$project_path/public/uploads"
     sudo chown -R www-data:www-data "$project_path/public/uploads"
-
+    
     # Set ACL permissions for better compatibility
     if command -v setfacl &> /dev/null; then
         sudo setfacl -R -m u:www-data:rwx "$project_path/storage"
@@ -199,7 +199,7 @@ set_project_permissions() {
         sudo setfacl -R -d -m u:www-data:rwx "$project_path/storage"
         sudo setfacl -R -d -m u:www-data:rwx "$project_path/bootstrap/cache"
     fi
-
+    
     echo "Permissions set successfully!"
 }
 
@@ -207,32 +207,32 @@ set_project_permissions() {
 install_supervisor() {
     echo "Installing Supervisor..."
     sudo apt install -y supervisor || error_exit "Failed to install Supervisor"
-
+    
     # Enable and start supervisor
     sudo systemctl enable supervisor
     sudo systemctl start supervisor
-
+    
     echo "Supervisor installed and started successfully!"
 }
 
 # Function to get server specifications for process recommendations
 get_server_specs() {
     echo "Analyzing server specifications..."
-
+    
     # Get CPU cores
     CPU_CORES=$(nproc)
-
+    
     # Get RAM in GB
     RAM_GB=$(free -g | awk '/^Mem:/{print $2}')
-
+    
     # Get available RAM in GB
     AVAILABLE_RAM_GB=$(free -g | awk '/^Mem:/{print $7}')
-
+    
     echo "Server Specifications:"
     echo "- CPU Cores: $CPU_CORES"
     echo "- Total RAM: ${RAM_GB}GB"
     echo "- Available RAM: ${AVAILABLE_RAM_GB}GB"
-
+    
     # Calculate recommended processes
     if [ "$RAM_GB" -ge 8 ] && [ "$CPU_CORES" -ge 4 ]; then
         RECOMMENDED_PROCESSES=$((CPU_CORES * 2))
@@ -244,7 +244,7 @@ get_server_specs() {
         RECOMMENDED_PROCESSES=2
         SERVER_TYPE="Basic"
     fi
-
+    
     echo "- Server Type: $SERVER_TYPE"
     echo "- Recommended Queue Processes: $RECOMMENDED_PROCESSES"
     echo ""
@@ -256,10 +256,10 @@ configure_queue_driver() {
     echo "1) Database (default) - Simple, no additional setup"
     echo "2) Redis - Fast, recommended for production"
     echo "3) Both - Database as fallback, Redis as primary"
-
+    
     read -p "Select queue driver (1-3, default: 1): " queue_driver_choice
     queue_driver_choice=${queue_driver_choice:-1}
-
+    
     case $queue_driver_choice in
         1)
             QUEUE_DRIVER="database"
@@ -287,52 +287,52 @@ configure_cache_session_drivers() {
     echo ""
     echo "Cache & Session Driver Configuration:"
     echo "Current selection: Queue = $QUEUE_DRIVER"
-
+    
     # Cache driver selection
     echo ""
     echo "Cache Driver Options:"
     echo "1) File (default) - Simple file-based caching"
     echo "2) Redis - Fast in-memory caching (recommended)"
     echo "3) Database - Store cache in database"
-
+    
     read -p "Select cache driver (1-3, default: 1): " cache_driver_choice
     cache_driver_choice=${cache_driver_choice:-1}
-
+    
     case $cache_driver_choice in
         1) CACHE_DRIVER="file" ;;
-        2)
+        2) 
             CACHE_DRIVER="redis"
             INSTALL_REDIS_FOR_CACHE=true
             ;;
         3) CACHE_DRIVER="database" ;;
         *) CACHE_DRIVER="file" ;;
     esac
-
+    
     # Session driver selection
     echo ""
     echo "Session Driver Options:"
     echo "1) File (default) - Store sessions in files"
     echo "2) Redis - Fast session storage (recommended for multiple servers)"
     echo "3) Database - Store sessions in database"
-
+    
     read -p "Select session driver (1-3, default: 1): " session_driver_choice
     session_driver_choice=${session_driver_choice:-1}
-
+    
     case $session_driver_choice in
         1) SESSION_DRIVER="file" ;;
-        2)
+        2) 
             SESSION_DRIVER="redis"
             INSTALL_REDIS_FOR_SESSION=true
             ;;
         3) SESSION_DRIVER="database" ;;
         *) SESSION_DRIVER="file" ;;
     esac
-
+    
     # Determine if Redis is needed
     if [ "$INSTALL_REDIS_FOR_QUEUE" = true ] || [ "$INSTALL_REDIS_FOR_CACHE" = true ] || [ "$INSTALL_REDIS_FOR_SESSION" = true ]; then
         INSTALL_REDIS=true
     fi
-
+    
     echo ""
     echo "Selected Configuration:"
     echo "- Queue Driver: $QUEUE_DRIVER"
@@ -346,31 +346,31 @@ configure_cache_session_drivers() {
 # Function to create multiple queue configurations for Supervisor
 create_advanced_queue_config() {
     local project_path="/var/www/html/$REPO_NAME"
-
+    
     echo ""
     echo "=== Advanced Queue Configuration ==="
-
+    
     # Get server specs and recommendations
     get_server_specs
-
+    
     # Configure drivers
     configure_queue_driver
     configure_cache_session_drivers
-
+    
     echo ""
     echo "=== Queue Workers Setup ==="
-
+    
     # Ask for number of different queues
     read -p "How many different queue types do you want to configure? (default: 1): " num_queue_types
     num_queue_types=${num_queue_types:-1}
-
+    
     # Array to store queue configurations
     declare -a QUEUE_CONFIGS
-
+    
     for ((i=1; i<=num_queue_types; i++)); do
         echo ""
         echo "--- Queue Type $i Configuration ---"
-
+        
         if [ $i -eq 1 ]; then
             default_queue_name="default"
             default_processes=$RECOMMENDED_PROCESSES
@@ -378,20 +378,20 @@ create_advanced_queue_config() {
             default_queue_name="queue$i"
             default_processes=2
         fi
-
+        
         read -p "Queue name (default: $default_queue_name): " queue_name
         queue_name=${queue_name:-$default_queue_name}
-
+        
         echo ""
         echo "Process Recommendations for '$queue_name' queue:"
         echo "- Light workload (emails, notifications): 1-2 processes"
         echo "- Medium workload (file processing, API calls): 3-5 processes"
         echo "- Heavy workload (image processing, reports): 5+ processes"
         echo "- Your server can handle up to $RECOMMENDED_PROCESSES processes efficiently"
-
+        
         read -p "Number of processes for '$queue_name' (recommended: $default_processes): " processes
         processes=${processes:-$default_processes}
-
+        
         # Validate process count
         if [ "$processes" -gt $((RECOMMENDED_PROCESSES * 2)) ]; then
             echo "Warning: $processes processes might overload your server!"
@@ -400,31 +400,31 @@ create_advanced_queue_config() {
                 echo "Reset to recommended: $processes processes"
             fi
         fi
-
+        
         read -p "Priority for '$queue_name' (1=highest, 5=lowest, default: 3): " priority
         priority=${priority:-3}
-
+        
         read -p "Max execution time in seconds (default: 3600): " max_time
         max_time=${max_time:-3600}
-
+        
         # Store configuration
         QUEUE_CONFIGS+=("$queue_name:$processes:$priority:$max_time")
-
+        
         echo "✓ Queue '$queue_name': $processes processes, priority $priority, max time ${max_time}s"
     done
-
+    
     echo ""
     echo "Creating Supervisor configurations..."
-
+    
     # Create supervisor config for each queue
     for config in "${QUEUE_CONFIGS[@]}"; do
         IFS=':' read -r queue_name processes priority max_time <<< "$config"
-
+        
         config_file="/etc/supervisor/conf.d/${REPO_NAME}_${queue_name}.conf"
-
+        
         # Set priority (lower number = higher priority)
         supervisor_priority=$((990 + priority * 10))
-
+        
         sudo tee "$config_file" << EOF
 [program:${REPO_NAME}_${queue_name}]
 process_name=%(program_name)s_%(process_num)02d
@@ -440,14 +440,14 @@ stopwaitsecs=$((max_time + 120))
 user=www-data
 priority=${supervisor_priority}
 EOF
-
+        
         # Create log file
         sudo touch "${project_path}/storage/logs/queue_${queue_name}.log"
         sudo chown www-data:www-data "${project_path}/storage/logs/queue_${queue_name}.log"
-
+        
         echo "✓ Created config for '$queue_name' queue"
     done
-
+    
     # Create a master queue monitor script
     sudo tee "/usr/local/bin/queue-monitor" << 'EOF'
 #!/bin/bash
@@ -468,19 +468,19 @@ echo ""
 echo "Recent Queue Logs:"
 find /var/www/html/*/storage/logs -name "queue_*.log" -exec tail -5 {} \; 2>/dev/null
 EOF
-
+    
     sudo chmod +x /usr/local/bin/queue-monitor
-
+    
     # Update supervisor
     sudo supervisorctl reread
     sudo supervisorctl update
-
+    
     # Start all queue workers
     for config in "${QUEUE_CONFIGS[@]}"; do
         IFS=':' read -r queue_name processes priority max_time <<< "$config"
         sudo supervisorctl start "${REPO_NAME}_${queue_name}:*"
     done
-
+    
     echo ""
     echo "🎉 Queue configuration completed successfully!"
     echo ""
@@ -489,7 +489,7 @@ EOF
         IFS=':' read -r queue_name processes priority max_time <<< "$config"
         echo "  ✓ $queue_name: $processes workers (priority: $priority, timeout: ${max_time}s)"
     done
-
+    
     echo ""
     echo "Useful Commands:"
     echo "  queue-monitor                              # Check queue status"
@@ -601,20 +601,20 @@ else
     echo "Configuring PostgreSQL..."
     # Set password for postgres user
     sudo -u postgres psql -c "ALTER USER postgres PASSWORD '${DB_PASS}';"
-
+    
     # Create user if not postgres
     if [ "$DB_USER" != "postgres" ]; then
         sudo -u postgres createuser --createdb --login --pwprompt "$DB_USER" || echo "User might already exist"
         sudo -u postgres psql -c "ALTER USER ${DB_USER} PASSWORD '${DB_PASS}';"
     fi
-
+    
     # Create database
     sudo -u postgres createdb -O "$DB_USER" "$DB_NAME" || echo "Database might already exist"
-
+    
     # Configure PostgreSQL to allow password authentication
     PG_VERSION=$(sudo -u postgres psql -t -c "SELECT version();" | grep -oP '\d+\.\d+' | head -1)
     PG_CONFIG_PATH="/etc/postgresql/${PG_VERSION}/main"
-
+    
     if [ -f "${PG_CONFIG_PATH}/pg_hba.conf" ]; then
         sudo sed -i "s/#listen_addresses = 'localhost'/listen_addresses = 'localhost'/" "${PG_CONFIG_PATH}/postgresql.conf"
         sudo sed -i "s/local   all             all                                     peer/local   all             all                                     md5/" "${PG_CONFIG_PATH}/pg_hba.conf"
@@ -639,7 +639,7 @@ safe_composer_config() {
     local key="$1"
     local value="$2"
     local scope="${3:---global}"
-
+    
     # Try to set the config and capture any errors
     if sudo -u www-data composer config $scope "$key" "$value" 2>/dev/null; then
         echo "✓ Set $key = $value"
@@ -677,7 +677,7 @@ select_node_version() {
     echo "2) Node.js 18.x (LTS)"
     echo "3) Node.js 20.x (Current)"
     read -p "Select Node.js version (1-3): " node_choice
-
+    
     case $node_choice in
         1) NODE_VERSION="16" ;;
         2) NODE_VERSION="18" ;;
@@ -736,9 +736,9 @@ if [ -d "$REPO_NAME" ]; then
     echo "2) Keep existing directory and update it"
     echo "3) Use a different directory name"
     echo "4) Exit and handle manually"
-
+    
     safe_read "Select option (1-4)" "1" clone_option
-
+    
     case $clone_option in
         1)
             echo "Removing existing directory and cloning fresh..."
@@ -904,22 +904,22 @@ elif [ ! -f ".env" ]; then
         DB_CONNECTION="pgsql"
         DB_PORT="5432"
     fi
-
+    
     # Set default queue driver
     if [ -z "$QUEUE_DRIVER" ]; then
         QUEUE_DRIVER="database"
     fi
-
+    
     # Set default cache driver
     if [ -z "$CACHE_DRIVER" ]; then
         CACHE_DRIVER="file"
     fi
-
+    
     # Set default session driver
     if [ -z "$SESSION_DRIVER" ]; then
         SESSION_DRIVER="file"
     fi
-
+    
     sudo tee .env << EOF
 APP_NAME=Laravel
 APP_ENV=production
@@ -1005,26 +1005,26 @@ sudo -u www-data php artisan storage:link || echo "Storage link already exists o
 handle_npm_build() {
     echo ""
     echo "=== Frontend Assets Setup ==="
-
+    
     # Check if package.json exists
     if [ -f "package.json" ]; then
         echo "✓ Found package.json - Frontend dependencies available"
-
+        
         # Fix NPM cache permissions first
         echo "Setting up NPM cache permissions..."
         sudo mkdir -p /var/www/.npm
         sudo chown -R www-data:www-data /var/www/.npm
         sudo mkdir -p /home/www-data/.npm
         sudo chown -R www-data:www-data /home/www-data/.npm
-
+        
         # Set NPM cache directory for www-data user
         sudo -u www-data npm config set cache /var/www/.npm
         sudo -u www-data npm config set prefix /var/www/.npm-global
-
+        
         # Clean any existing problematic cache
         echo "Cleaning NPM cache..."
         sudo -u www-data npm cache clean --force 2>/dev/null || true
-
+        
         # Detect frontend framework/build tools
         echo "Detecting frontend setup..."
         if grep -q "vite" package.json; then
@@ -1038,7 +1038,7 @@ handle_npm_build() {
         elif grep -q "vue" package.json; then
             echo "  🟢 Detected: Vue.js components"
         fi
-
+        
         # Show available scripts
         echo ""
         echo "Available NPM scripts:"
@@ -1051,23 +1051,23 @@ handle_npm_build() {
             # Fallback: simple grep
             grep -A 10 '"scripts"' package.json | grep '"' | head -10 | sed 's/^/  /' || echo "  - Unable to parse scripts"
         fi
-
+        
         echo ""
         if confirm "Do you want to install NPM dependencies and build assets?"; then
-
+            
             # Clean up any problematic existing node_modules
             if [ -d "node_modules" ]; then
                 echo "Cleaning existing node_modules..."
                 sudo rm -rf node_modules package-lock.json 2>/dev/null || true
             fi
-
+            
             # Install dependencies with progress and proper error handling
             echo "Installing NPM dependencies (this may take a few minutes)..."
             echo "Progress will be shown below:"
-
+            
             # Try multiple installation strategies
             NPM_INSTALL_SUCCESS=false
-
+            
             # Strategy 1: Standard install
             echo "Attempting standard NPM install..."
             if sudo -u www-data npm install --no-audit --no-fund --progress=false 2>/dev/null; then
@@ -1075,7 +1075,7 @@ handle_npm_build() {
                 echo "✓ NPM dependencies installed successfully"
             else
                 echo "⚠ Standard install failed, trying alternative methods..."
-
+                
                 # Strategy 2: Legacy peer deps
                 echo "Trying with legacy peer deps..."
                 if sudo -u www-data npm install --legacy-peer-deps --no-audit --no-fund --progress=false 2>/dev/null; then
@@ -1083,7 +1083,7 @@ handle_npm_build() {
                     echo "✓ NPM dependencies installed with legacy peer deps"
                 else
                     echo "⚠ Legacy peer deps failed, trying force install..."
-
+                    
                     # Strategy 3: Force install
                     echo "Trying with force flag..."
                     if sudo -u www-data npm install --force --no-audit --no-fund --progress=false 2>/dev/null; then
@@ -1091,7 +1091,7 @@ handle_npm_build() {
                         echo "✓ NPM dependencies installed with force flag"
                     else
                         echo "⚠ Force install failed, trying cache-free install..."
-
+                        
                         # Strategy 4: No cache
                         echo "Trying without cache..."
                         if sudo -u www-data npm install --no-cache --legacy-peer-deps --no-audit --no-fund 2>/dev/null; then
@@ -1101,7 +1101,7 @@ handle_npm_build() {
                     fi
                 fi
             fi
-
+            
             if [ "$NPM_INSTALL_SUCCESS" = true ]; then
                 echo ""
                 echo "Build Options:"
@@ -1118,9 +1118,9 @@ handle_npm_build() {
                 fi
                 echo "4) Custom build command"
                 echo "5) Skip build process"
-
+                
                 safe_read "Select build option (1-5)" "1" build_choice
-
+                
                 case $build_choice in
                     1)
                         if [ "$BUILD_TOOL" = "webpack" ]; then
@@ -1130,10 +1130,10 @@ handle_npm_build() {
                             echo "Running production build..."
                             sudo -u www-data npm run build || sudo -u www-data npm run prod
                         fi
-
+                        
                         if [ $? -eq 0 ]; then
                             echo "✓ Production build completed successfully"
-
+                            
                             # Check if public assets were created
                             if [ -d "public/build" ] || [ -d "public/js" ] || [ -d "public/css" ]; then
                                 echo "✓ Built assets found in public directory"
@@ -1173,7 +1173,7 @@ handle_npm_build() {
                         echo "Invalid option, skipping build"
                         ;;
                 esac
-
+                
                 # Optional: Development watching
                 if [ "$build_choice" = "2" ] && [ "$BUILD_TOOL" = "vite" ]; then
                     echo ""
@@ -1191,7 +1191,7 @@ handle_npm_build() {
                         echo "  - Stop: kill $WATCH_PID"
                     fi
                 fi
-
+                
             else
                 echo "❌ All NPM install methods failed"
                 echo ""
@@ -1243,6 +1243,315 @@ handle_npm_build() {
 
 # Run NPM setup
 handle_npm_build
+
+# Setup Laravel Scheduler (Crontab) - Enhanced Auto Setup with Laravel 11+ Support
+setup_laravel_scheduler() {
+    echo ""
+    echo "=========================================="
+    echo "🕐 Laravel Scheduler Auto Setup"
+    echo "=========================================="
+    
+    # Detect Laravel version and structure
+    LARAVEL_VERSION=""
+    SCHEDULER_CONFIG_FILE=""
+    IS_LARAVEL_PROJECT=false
+    
+    # Check if this is a Laravel project
+    if [ -f "artisan" ]; then
+        echo "✅ Laravel artisan command found"
+        IS_LARAVEL_PROJECT=true
+        
+        # Detect Laravel version
+        if sudo -u www-data php artisan --version 2>/dev/null | grep -q "Laravel Framework"; then
+            LARAVEL_VERSION=$(sudo -u www-data php artisan --version 2>/dev/null | grep -oP 'Laravel Framework \K[0-9]+\.[0-9]+')
+            echo "✅ Detected Laravel Framework version: $LARAVEL_VERSION"
+        fi
+    fi
+    
+    if [ "$IS_LARAVEL_PROJECT" = true ]; then
+        # Check for Laravel 11+ structure (routes/console.php or bootstrap/app.php)
+        if [ -f "routes/console.php" ]; then
+            echo "✅ Laravel 11+ structure detected (routes/console.php)"
+            SCHEDULER_CONFIG_FILE="routes/console.php"
+            
+            # Check if scheduler is configured in routes/console.php
+            if grep -q "Schedule\|->command\|->job\|->call" "routes/console.php" 2>/dev/null; then
+                echo "✅ Scheduled tasks found in routes/console.php"
+            else
+                echo "ℹ️  No scheduled tasks found in routes/console.php yet"
+            fi
+            
+        # Check for Laravel 10 and older structure (app/Console/Kernel.php)
+        elif [ -f "app/Console/Kernel.php" ]; then
+            echo "✅ Laravel 10/older structure detected (app/Console/Kernel.php)"
+            SCHEDULER_CONFIG_FILE="app/Console/Kernel.php"
+            
+            # Check if there are any scheduled commands in Kernel.php
+            if grep -q "->schedule\|->command\|->job\|->call" "app/Console/Kernel.php"; then
+                echo "✅ Scheduled tasks found in Console Kernel"
+            else
+                echo "ℹ️  No scheduled tasks found in Console Kernel yet"
+            fi
+            
+        # Check for Laravel 11+ alternative structure (bootstrap/app.php)
+        elif [ -f "bootstrap/app.php" ] && grep -q "withSchedule\|schedule" "bootstrap/app.php" 2>/dev/null; then
+            echo "✅ Laravel 11+ structure detected (bootstrap/app.php with schedule)"
+            SCHEDULER_CONFIG_FILE="bootstrap/app.php"
+            
+        else
+            echo "⚠️  Laravel scheduler configuration file not found"
+            echo "   Looking for: routes/console.php, app/Console/Kernel.php, or bootstrap/app.php"
+        fi
+        
+        echo ""
+        echo "📋 Laravel Project Analysis:"
+        echo "  🏗️  Framework: Laravel $LARAVEL_VERSION"
+        echo "  📁 Structure: $([ -f "routes/console.php" ] && echo "Laravel 11+" || echo "Laravel 10/older")"
+        echo "  ⚙️  Scheduler Config: ${SCHEDULER_CONFIG_FILE:-"Not found"}"
+        echo ""
+        echo "The Laravel Scheduler allows you to run automated tasks like:"
+        echo "  📧 Sending scheduled emails"
+        echo "  🧹 Database cleanup and maintenance"  
+        echo "  📊 Generating reports"
+        echo "  💾 Creating backups"
+        echo "  🔄 Processing queued jobs"
+        echo ""
+        
+        if confirm "Do you want to automatically set up Laravel's task scheduler?"; then
+            
+            echo ""
+            echo "⚙️  Setting up Laravel scheduler with automatic crontab configuration..."
+            
+            PROJECT_PATH="/var/www/html/$REPO_NAME"
+            CRON_JOB="* * * * * cd $PROJECT_PATH && php artisan schedule:run >> /dev/null 2>&1"
+            
+            # Check if cron job already exists
+            EXISTING_CRON=$(sudo -u www-data crontab -l 2>/dev/null | grep "schedule:run" || echo "")
+            
+            if [ ! -z "$EXISTING_CRON" ]; then
+                echo "⚠️  Found existing Laravel scheduler cron job(s):"
+                echo "$EXISTING_CRON" | sed 's/^/   /'
+                echo ""
+                echo "Auto Setup Options:"
+                echo "1) 🔄 Replace existing with this project (recommended)"
+                echo "2) ➕ Add additional cron job for this project"
+                echo "3) 🚫 Keep existing and skip auto setup"
+                echo "4) 🗑️  Remove all existing and create new"
+                
+                safe_read "Select option (1-4)" "1" cron_choice
+                
+                case $cron_choice in
+                    1)
+                        echo "🔄 Replacing existing cron job with new one..."
+                        sudo -u www-data crontab -l 2>/dev/null | grep -v "schedule:run" | sudo -u www-data crontab -
+                        (sudo -u www-data crontab -l 2>/dev/null; echo "$CRON_JOB") | sudo -u www-data crontab -
+                        echo "✅ Cron job replaced successfully"
+                        CRON_SETUP_SUCCESS=true
+                        ;;
+                    2)
+                        echo "➕ Adding additional cron job for this project..."
+                        (sudo -u www-data crontab -l 2>/dev/null; echo "$CRON_JOB") | sudo -u www-data crontab -
+                        echo "✅ Additional cron job added"
+                        CRON_SETUP_SUCCESS=true
+                        ;;
+                    3)
+                        echo "🚫 Keeping existing cron job, skipping auto setup"
+                        CRON_SETUP_SUCCESS=false
+                        ;;
+                    4)
+                        echo "🗑️  Removing all existing cron jobs and creating new..."
+                        sudo -u www-data crontab -l 2>/dev/null | grep -v "schedule:run" | sudo -u www-data crontab -
+                        (sudo -u www-data crontab -l 2>/dev/null; echo "$CRON_JOB") | sudo -u www-data crontab -
+                        echo "✅ Cron job recreated successfully"
+                        CRON_SETUP_SUCCESS=true
+                        ;;
+                    *)
+                        echo "❌ Invalid option, skipping auto setup"
+                        CRON_SETUP_SUCCESS=false
+                        ;;
+                esac
+            else
+                # No existing cron job, add new one
+                echo "📝 Adding Laravel scheduler to crontab (no existing jobs found)..."
+                (sudo -u www-data crontab -l 2>/dev/null; echo "$CRON_JOB") | sudo -u www-data crontab -
+                echo "✅ Laravel scheduler cron job added successfully"
+                CRON_SETUP_SUCCESS=true
+            fi
+            
+            # Verify and test the setup if successful
+            if [ "$CRON_SETUP_SUCCESS" = true ]; then
+                echo ""
+                echo "🔍 Verifying cron job installation..."
+                if sudo -u www-data crontab -l 2>/dev/null | grep -q "$PROJECT_PATH.*schedule:run"; then
+                    echo "✅ Cron job verified successfully"
+                    
+                    # Show current cron jobs
+                    echo ""
+                    echo "📋 Current cron jobs for www-data user:"
+                    sudo -u www-data crontab -l 2>/dev/null | grep -E "schedule:run|#|^$" | nl -w2 -s'. ' || echo "  No cron jobs found"
+                    
+                    # Auto-test the scheduler
+                    echo ""
+                    echo "🧪 Testing Laravel scheduler functionality..."
+                    cd "$PROJECT_PATH"
+                    
+                    # Test artisan availability
+                    if sudo -u www-data php artisan --version >/dev/null 2>&1; then
+                        echo "✅ Laravel artisan is working"
+                        
+                        # Show scheduled tasks
+                        echo ""
+                        echo "📅 Current scheduled tasks in this project:"
+                        if sudo -u www-data php artisan schedule:list 2>/dev/null | grep -v "No scheduled commands"; then
+                            echo "✅ Found scheduled tasks"
+                        else
+                            echo "ℹ️  No scheduled tasks defined yet (this is normal for new projects)"
+                        fi
+                        
+                        # Test actual schedule run
+                        echo ""
+                        echo "🏃 Running scheduler once to test..."
+                        if sudo -u www-data php artisan schedule:run 2>/dev/null; then
+                            echo "✅ Schedule run completed successfully"
+                        else
+                            echo "⚠️  Schedule run completed (no output is normal when no tasks are scheduled)"
+                        fi
+                        
+                        # Check for Laravel logs
+                        if [ -f "storage/logs/laravel.log" ]; then
+                            echo "✅ Laravel log file found for monitoring"
+                        else
+                            echo "ℹ️  Laravel log file not found yet (will be created when needed)"
+                        fi
+                        
+                    else
+                        echo "❌ Laravel artisan test failed"
+                        echo "   Please verify this is a valid Laravel installation"
+                    fi
+                    
+                else
+                    echo "❌ Failed to verify cron job installation"
+                    echo "   You may need to set it up manually"
+                fi
+                
+                # Success summary with version-specific instructions
+                echo ""
+                echo "🎉 Laravel Scheduler Auto Setup Complete!"
+                echo ""
+                echo "📊 Setup Summary:"
+                echo "  ✅ Laravel Version: $LARAVEL_VERSION"
+                echo "  ✅ Cron job: Every minute (* * * * *)"
+                echo "  ✅ Project: $PROJECT_PATH"
+                echo "  ✅ User: www-data"
+                echo "  ✅ Output: Silent (errors only to Laravel log)"
+                echo ""
+                echo "🚀 Next Steps to Add Scheduled Tasks:"
+                echo ""
+                
+                # Version-specific instructions
+                if [ -f "routes/console.php" ]; then
+                    echo "📝 For Laravel 11+, edit routes/console.php:"
+                    echo ""
+                    echo "use Illuminate\\Support\\Facades\\Schedule;"
+                    echo ""
+                    echo "Schedule::command('emails:send')->daily();"
+                    echo "Schedule::job(new ProcessPayments)->hourly();"
+                    echo "Schedule::call(function () {"
+                    echo "    // Your custom code"
+                    echo "})->everyFiveMinutes();"
+                    echo ""
+                elif [ -f "app/Console/Kernel.php" ]; then
+                    echo "📝 For Laravel 10/older, edit app/Console/Kernel.php schedule() method:"
+                    echo ""
+                    echo "protected function schedule(Schedule \$schedule)"
+                    echo "{"
+                    echo "    \$schedule->command('emails:send')->daily();"
+                    echo "    \$schedule->job(new ProcessPayments)->hourly();"
+                    echo "    \$schedule->call(function () {"
+                    echo "        // Your custom code"
+                    echo "    })->everyFiveMinutes();"
+                    echo "}"
+                    echo ""
+                fi
+                
+                echo "2. 🔧 Create custom artisan commands:"
+                echo "   php artisan make:command SendDailyEmails"
+                echo "   php artisan make:command GenerateReports"
+                echo ""
+                echo "3. 📋 Common scheduling examples:"
+                echo "   ->everyMinute()     // Every minute"
+                echo "   ->hourly()          // Every hour"
+                echo "   ->daily()           // Every day at midnight"
+                echo "   ->dailyAt('13:00')  // Every day at 1:00 PM"
+                echo "   ->weekly()          // Every Sunday at midnight"
+                echo "   ->monthly()         // First day of every month"
+                echo ""
+                echo "🛠️  Useful Management Commands:"
+                echo "  php artisan schedule:list              # View all scheduled tasks"
+                echo "  php artisan schedule:run               # Run scheduler manually"
+                echo "  php artisan schedule:work              # Keep scheduler running"
+                echo "  sudo -u www-data crontab -l            # View cron jobs"
+                echo "  sudo -u www-data crontab -e            # Edit cron jobs manually"
+                echo "  tail -f storage/logs/laravel.log       # Monitor scheduler logs"
+                echo ""
+                echo "💡 Laravel 11+ Pro Tips:"
+                echo "  - Scheduled tasks are now defined in routes/console.php"
+                echo "  - Use 'use Illuminate\\Support\\Facades\\Schedule;' at the top"
+                echo "  - Test with 'php artisan schedule:run' and 'php artisan schedule:list'"
+                echo "  - Check storage/logs/laravel.log for any scheduler errors"
+                
+            else
+                echo ""
+                echo "⏭️  Scheduler auto setup skipped."
+                show_manual_setup_instructions
+            fi
+            
+        else
+            echo ""
+            echo "⏭️  Laravel scheduler setup skipped by user choice."
+            show_manual_setup_instructions
+        fi
+    else
+        echo "ℹ️  Laravel artisan not found or not a Laravel project"
+        echo ""
+        echo "This could indicate:"
+        echo "  🚫 Not a Laravel project"
+        echo "  📁 Different framework (Symfony, CodeIgniter, etc.)"
+        echo "  ⚠️  Incomplete Laravel installation"
+        echo "  🏗️  Custom project structure"
+        echo ""
+        echo "For non-Laravel projects or manual setup:"
+        show_manual_setup_instructions
+    fi
+}
+
+# Function to show manual setup instructions (updated for Laravel 11+)
+show_manual_setup_instructions() {
+    echo "📋 Manual Crontab Setup Instructions:"
+    echo ""
+    echo "1. 📝 Edit crontab:"
+    echo "   sudo -u www-data crontab -e"
+    echo ""
+    echo "2. ➕ Add this line:"
+    echo "   * * * * * cd /var/www/html/$REPO_NAME && php artisan schedule:run >> /dev/null 2>&1"
+    echo ""
+    echo "3. 💾 Save and exit the editor"
+    echo ""
+    echo "4. ✅ Verify installation:"
+    echo "   sudo -u www-data crontab -l"
+    echo ""
+    echo "5. 🧪 Test the scheduler:"
+    echo "   cd /var/www/html/$REPO_NAME"
+    echo "   php artisan schedule:list"
+    echo "   php artisan schedule:run"
+    echo ""
+    echo "6. 📝 Add scheduled tasks:"
+    echo "   Laravel 11+: Edit routes/console.php"
+    echo "   Laravel 10-: Edit app/Console/Kernel.php"
+}
+
+# Setup Laravel scheduler
+setup_laravel_scheduler
 
 # Cache configuration for production
 echo "Optimizing Laravel for production..."
@@ -1402,6 +1711,13 @@ else
     echo "Frontend Assets: Not applicable (no package.json)"
 fi
 
+# Check if Laravel scheduler is set up
+if sudo -u www-data crontab -l 2>/dev/null | grep -q "schedule:run"; then
+    echo "Laravel Scheduler: ✓ Configured and running"
+else
+    echo "Laravel Scheduler: Not configured"
+fi
+
 echo ""
 echo "Services Status:"
 echo "- Web Server: Running"
@@ -1437,6 +1753,16 @@ if [ -f "/var/www/html/${REPO_NAME}/package.json" ]; then
         echo "  npm run watch    # Watch for changes"
         echo "  npm run build    # Production build"
     fi
+fi
+
+# Add scheduler-specific information
+if sudo -u www-data crontab -l 2>/dev/null | grep -q "schedule:run"; then
+    echo ""
+    echo "Laravel Scheduler Commands:"
+    echo "  php artisan schedule:list       # View scheduled tasks"
+    echo "  php artisan schedule:run        # Run scheduler manually"
+    echo "  sudo -u www-data crontab -l     # View cron jobs"
+    echo "  tail -f storage/logs/laravel.log # Monitor scheduler logs"
 fi
 
 echo ""
