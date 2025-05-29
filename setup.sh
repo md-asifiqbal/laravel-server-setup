@@ -13,7 +13,7 @@
 # - Laravel optimization
 # - Production-ready configurations
 #
-# Fork Repository: https://github.com/theihasan/server-setup
+# Fork Repository: https://github.com/theihasan/laravel-server-setup
 #############################################################################
 
 # Fix for piped execution - redirect stdin from TTY if available
@@ -29,12 +29,12 @@ if [ ! -t 0 ]; then
         echo "Please use one of these methods instead:"
         echo ""
         echo "Method 1 (Recommended):"
-        echo "  curl -fsSL https://raw.githubusercontent.com/theihasan/server-setup/main/lamp.sh -o setup.sh"
+        echo "  curl -fsSL https://raw.githubusercontent.com/theihasan/laravel-server-setup/main/setup.sh -o setup.sh"
         echo "  chmod +x setup.sh"
         echo "  ./setup.sh"
         echo ""
         echo "Method 2:"
-        echo "  bash <(curl -fsSL https://raw.githubusercontent.com/theihasan/server-setup/main/lamp.sh)"
+        echo "  bash <(curl -fsSL https://raw.githubusercontent.com/theihasan/laravel-server-setup/main/setup.sh)"
         echo ""
         exit 1
     fi
