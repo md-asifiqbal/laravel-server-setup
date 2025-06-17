@@ -192,12 +192,37 @@ set_project_permissions() {
     sudo chmod -R 775 "$project_path/public/uploads"
     sudo chown -R www-data:www-data "$project_path/public/uploads"
     
+    # Ensure .env file has proper permissions
+    if [ -f "$project_path/.env" ]; then
+        sudo chmod 664 "$project_path/.env"
+        sudo chown www-data:www-data "$project_path/.env"
+    fi
+    
+    # Create logs directory if it doesn't exist
+    if [ ! -d "$project_path/storage/logs" ]; then
+        sudo mkdir -p "$project_path/storage/logs"
+        sudo chmod -R 775 "$project_path/storage/logs"
+        sudo chown -R www-data:www-data "$project_path/storage/logs"
+    fi
+    
+    # Create laravel.log if it doesn't exist and set permissions
+    if [ ! -f "$project_path/storage/logs/laravel.log" ]; then
+        sudo touch "$project_path/storage/logs/laravel.log"
+        sudo chmod 664 "$project_path/storage/logs/laravel.log"
+        sudo chown www-data:www-data "$project_path/storage/logs/laravel.log"
+    fi
+    
     # Set ACL permissions for better compatibility
     if command -v setfacl &> /dev/null; then
         sudo setfacl -R -m u:www-data:rwx "$project_path/storage"
         sudo setfacl -R -m u:www-data:rwx "$project_path/bootstrap/cache"
         sudo setfacl -R -d -m u:www-data:rwx "$project_path/storage"
         sudo setfacl -R -d -m u:www-data:rwx "$project_path/bootstrap/cache"
+        
+        # Add ACL for .env file
+        if [ -f "$project_path/.env" ]; then
+            sudo setfacl -m u:www-data:rw "$project_path/.env"
+        fi
     fi
     
     echo "Permissions set successfully!"
