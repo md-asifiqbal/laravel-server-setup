@@ -156,6 +156,7 @@ get_database_credentials() {
 # Function to set comprehensive permissions
 set_project_permissions() {
     local project_path="/var/www/html/$REPO_NAME"
+    local current_user=$(whoami)
     
     echo "Setting comprehensive permissions for Laravel project..."
     
@@ -212,8 +213,25 @@ set_project_permissions() {
         sudo chown www-data:www-data "$project_path/storage/logs/laravel.log"
     fi
     
+    # Add current user to www-data group for better file access
+    echo "Adding current user to www-data group..."
+    sudo usermod -a -G www-data "$current_user"
+    
+    # Set more permissive permissions for better compatibility across environments
+    echo "Setting more permissive permissions..."
+    sudo chmod -R 777 "$project_path/storage"
+    sudo chmod -R 777 "$project_path/bootstrap/cache"
+    sudo chmod 666 "$project_path/.env"
+    
+    # Make sure current user can write to these files
+    echo "Setting ownership for current user and www-data group..."
+    sudo chown -R "$current_user":www-data "$project_path/storage"
+    sudo chown -R "$current_user":www-data "$project_path/bootstrap/cache"
+    sudo chown "$current_user":www-data "$project_path/.env"
+    
     # Set ACL permissions for better compatibility
     if command -v setfacl &> /dev/null; then
+        echo "Setting ACL permissions..."
         sudo setfacl -R -m u:www-data:rwx "$project_path/storage"
         sudo setfacl -R -m u:www-data:rwx "$project_path/bootstrap/cache"
         sudo setfacl -R -d -m u:www-data:rwx "$project_path/storage"
@@ -223,6 +241,28 @@ set_project_permissions() {
         if [ -f "$project_path/.env" ]; then
             sudo setfacl -m u:www-data:rw "$project_path/.env"
         fi
+        
+        # Add ACL for current user
+        sudo setfacl -R -m u:"$current_user":rwx "$project_path/storage"
+        sudo setfacl -R -m u:"$current_user":rwx "$project_path/bootstrap/cache"
+        sudo setfacl -m u:"$current_user":rw "$project_path/.env"
+    else
+        echo "Installing ACL..."
+        sudo apt-get install -y acl
+        sudo setfacl -R -m u:www-data:rwx "$project_path/storage"
+        sudo setfacl -R -m u:www-data:rwx "$project_path/bootstrap/cache"
+        sudo setfacl -R -d -m u:www-data:rwx "$project_path/storage"
+        sudo setfacl -R -d -m u:www-data:rwx "$project_path/bootstrap/cache"
+        
+        # Add ACL for .env file
+        if [ -f "$project_path/.env" ]; then
+            sudo setfacl -m u:www-data:rw "$project_path/.env"
+        fi
+        
+        # Add ACL for current user
+        sudo setfacl -R -m u:"$current_user":rwx "$project_path/storage"
+        sudo setfacl -R -m u:"$current_user":rwx "$project_path/bootstrap/cache"
+        sudo setfacl -m u:"$current_user":rw "$project_path/.env"
     fi
     
     echo "Permissions set successfully!"
