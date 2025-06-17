@@ -153,6 +153,182 @@ get_database_credentials() {
     fi
 }
 
+# Function to configure Laravel application settings
+configure_app_settings() {
+    echo "\nLaravel Application Configuration:"
+    
+    # App Name
+    safe_read "Enter application name" "Laravel" APP_NAME
+    
+    # App Environment
+    echo "\nApplication Environment:"
+    echo "1) Production (recommended for live servers)"
+    echo "2) Local (development environment)"
+    echo "3) Testing"
+    echo "4) Staging"
+    
+    read -p "Select environment (1-4, default: 1): " app_env_choice
+    app_env_choice=${app_env_choice:-1}
+    
+    case $app_env_choice in
+        1) APP_ENV="production" ;;
+        2) APP_ENV="local" ;;
+        3) APP_ENV="testing" ;;
+        4) APP_ENV="staging" ;;
+        *) APP_ENV="production" ;;
+    esac
+    
+    # App Debug Mode
+    if [ "$APP_ENV" = "production" ]; then
+        default_debug="false"
+    else
+        default_debug="true"
+    fi
+    
+    echo "\nDebug Mode: ($default_debug for $APP_ENV environment)"
+    if confirm "Enable debug mode?"; then
+        APP_DEBUG="true"
+    else
+        APP_DEBUG="false"
+    fi
+    
+    # Domain and App URL
+    echo "\nDomain Configuration:"
+    safe_read "Enter your domain name (e.g., example.com)" "localhost" DOMAIN_NAME
+    
+    # Determine protocol based on SSL selection
+    APP_URL="http://${DOMAIN_NAME}"
+    
+    echo "\nSelected Application Settings:"
+    echo "- App Name: $APP_NAME"
+    echo "- Environment: $APP_ENV"
+    echo "- Debug Mode: $APP_DEBUG"
+    echo "- URL: $APP_URL"
+    echo "- Domain: $DOMAIN_NAME"
+}
+
+# Function to configure database settings with third-party option
+configure_database_settings() {
+    echo "\nDatabase Configuration:"
+    echo "1) Local database (default)"
+    echo "2) External/managed database"
+    echo "3) Both local and external databases"
+    
+    read -p "Select database configuration (1-3, default: 1): " db_config_choice
+    db_config_choice=${db_config_choice:-1}
+    
+    case $db_config_choice in
+        1)
+            # Local database only (existing functionality)
+            DB_CONFIG_TYPE="local"
+            select_database
+            get_database_credentials
+            ;;
+        2)
+            # External database only
+            DB_CONFIG_TYPE="external"
+            select_database
+            
+            # Get external database credentials
+            safe_read "Enter external database host" "your-db-host.com" DB_HOST
+            safe_read "Enter external database port" "3306" DB_PORT
+            safe_read "Enter external database name" "mydatabase" DB_NAME
+            safe_read "Enter external database username" "dbuser" DB_USER
+            read -s -p "Enter external database password: " DB_PASS
+            echo
+            
+            # Skip local database installation
+            SKIP_DB_INSTALL=true
+            ;;
+        3)
+            # Both local and external
+            DB_CONFIG_TYPE="both"
+            select_database
+            
+            # Local database
+            echo "\nLocal Database Configuration:"
+            get_database_credentials
+            
+            # External database
+            echo "\nExternal Database Configuration:"
+            safe_read "Enter external database host" "your-db-host.com" EXTERNAL_DB_HOST
+            safe_read "Enter external database port" "3306" EXTERNAL_DB_PORT
+            safe_read "Enter external database name" "mydatabase" EXTERNAL_DB_NAME
+            safe_read "Enter external database username" "dbuser" EXTERNAL_DB_USER
+            read -s -p "Enter external database password: " EXTERNAL_DB_PASS
+            echo
+            
+            # Ask which one to use as primary
+            echo "\nWhich database should be the primary connection?"
+            echo "1) Local database"
+            echo "2) External database"
+            read -p "Select primary database (1-2, default: 1): " primary_db_choice
+            
+            if [ "$primary_db_choice" = "2" ]; then
+                # Use external as primary, save local as secondary
+                SECONDARY_DB_HOST="127.0.0.1"
+                SECONDARY_DB_PORT=${DB_PORT}
+                SECONDARY_DB_NAME=${DB_NAME}
+                SECONDARY_DB_USER=${DB_USER}
+                SECONDARY_DB_PASS=${DB_PASS}
+                
+                # Set external as primary
+                DB_HOST=${EXTERNAL_DB_HOST}
+                DB_PORT=${EXTERNAL_DB_PORT}
+                DB_NAME=${EXTERNAL_DB_NAME}
+                DB_USER=${EXTERNAL_DB_USER}
+                DB_PASS=${EXTERNAL_DB_PASS}
+            else
+                # Use local as primary, save external as secondary
+                SECONDARY_DB_HOST=${EXTERNAL_DB_HOST}
+                SECONDARY_DB_PORT=${EXTERNAL_DB_PORT}
+                SECONDARY_DB_NAME=${EXTERNAL_DB_NAME}
+                SECONDARY_DB_USER=${EXTERNAL_DB_USER}
+                SECONDARY_DB_PASS=${EXTERNAL_DB_PASS}
+                
+                # Local is already set as primary
+            fi
+            
+            # Ask if user wants to configure read/write separation
+            echo "\nDo you want to configure read/write separation?"
+            echo "This allows you to use one database for writes and another for reads"
+            if confirm "Configure read/write separation?"; then
+                echo "\nWhich database should handle READ operations?"
+                echo "1) Primary database"
+                echo "2) Secondary database"
+                echo "3) Both (load balanced)"
+                read -p "Select read database (1-3, default: 2): " read_db_choice
+                read_db_choice=${read_db_choice:-2}
+                
+                case $read_db_choice in
+                    1) DB_READ_HOST=${DB_HOST} ;;
+                    2) DB_READ_HOST=${SECONDARY_DB_HOST} ;;
+                    3) DB_READ_HOST="${DB_HOST},${SECONDARY_DB_HOST}" ;;
+                    *) DB_READ_HOST=${SECONDARY_DB_HOST} ;;
+                esac
+                
+                echo "\nWhich database should handle WRITE operations?"
+                echo "1) Primary database (recommended)"
+                echo "2) Secondary database"
+                read -p "Select write database (1-2, default: 1): " write_db_choice
+                write_db_choice=${write_db_choice:-1}
+                
+                if [ "$write_db_choice" = "2" ]; then
+                    DB_WRITE_HOST=${SECONDARY_DB_HOST}
+                else
+                    DB_WRITE_HOST=${DB_HOST}
+                fi
+                
+                # Set read/write separation flag
+                USE_DB_READ_WRITE_SEPARATION=true
+            fi
+            ;;
+        *)
+            error_exit "Invalid database configuration selection"
+            ;;
+    esac
+}
+
 # Function to set comprehensive permissions
 set_project_permissions() {
     local project_path="/var/www/html/$REPO_NAME"
@@ -614,6 +790,12 @@ sudo apt update
 # Select PHP version
 select_php_version
 
+# Configure application settings
+configure_app_settings
+
+# Configure database settings
+configure_database_settings
+
 # Install PHP and extensions
 echo "Installing PHP ${PHP_VERSION} and extensions..."
 if [ "$DB_TYPE" = "mysql" ]; then
@@ -1060,21 +1242,32 @@ elif [ ! -f ".env" ]; then
     fi
     
     sudo tee .env << EOF
-APP_NAME=Laravel
-APP_ENV=production
+APP_NAME="${APP_NAME}"
+APP_ENV=${APP_ENV}
 APP_KEY=
-APP_DEBUG=false
-APP_URL=http://localhost
+APP_DEBUG=${APP_DEBUG}
+APP_URL=${APP_URL}
 
 LOG_CHANNEL=stack
 LOG_LEVEL=debug
 
 DB_CONNECTION=${DB_CONNECTION}
-DB_HOST=127.0.0.1
+DB_HOST=${DB_HOST:-127.0.0.1}
 DB_PORT=${DB_PORT}
 DB_DATABASE=${DB_NAME}
 DB_USERNAME=${DB_USER}
 DB_PASSWORD=${DB_PASS}
+
+# Add secondary database configuration if using both
+${SECONDARY_DB_HOST:+DB_SECONDARY_HOST=${SECONDARY_DB_HOST}}
+${SECONDARY_DB_PORT:+DB_SECONDARY_PORT=${SECONDARY_DB_PORT}}
+${SECONDARY_DB_NAME:+DB_SECONDARY_DATABASE=${SECONDARY_DB_NAME}}
+${SECONDARY_DB_USER:+DB_SECONDARY_USERNAME=${SECONDARY_DB_USER}}
+${SECONDARY_DB_PASS:+DB_SECONDARY_PASSWORD=${SECONDARY_DB_PASS}}
+
+# Add read/write database configuration if enabled
+${USE_DB_READ_WRITE_SEPARATION:+DB_READ_HOST=${DB_READ_HOST}}
+${USE_DB_READ_WRITE_SEPARATION:+DB_WRITE_HOST=${DB_WRITE_HOST}}
 
 BROADCAST_DRIVER=log
 CACHE_DRIVER=${CACHE_DRIVER}
