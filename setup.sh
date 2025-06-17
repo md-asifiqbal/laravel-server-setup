@@ -793,6 +793,11 @@ else
     if sudo git clone "$REPO_URL"; then
         cd "$REPO_NAME"
         echo "✓ Repository cloned successfully"
+        
+        # Verify this is the correct directory and has expected files
+        echo "📋 Project contents:"
+        ls -la | head -10
+        
     else
         echo ""
         echo "Failed to clone repository. This could be due to:"
@@ -813,11 +818,13 @@ else
 fi
 
 echo "✓ Repository ready at: /var/www/html/$REPO_NAME"
+echo "📁 Current working directory: $(pwd)"
 
 # Set comprehensive permissions
 set_project_permissions
 
 # Create composer cache directories with proper permissions
+echo "Setting up Composer cache and working directory..."
 sudo mkdir -p /var/www/.cache/composer/files
 sudo mkdir -p /var/www/.cache/composer/repo
 sudo mkdir -p /var/www/.config/composer
@@ -825,6 +832,17 @@ sudo chown -R www-data:www-data /var/www/.cache
 sudo chown -R www-data:www-data /var/www/.config
 sudo chmod -R 755 /var/www/.cache
 sudo chmod -R 755 /var/www/.config
+
+# Ensure we're in the correct project directory before composer operations
+echo "Verifying project directory structure..."
+PROJECT_DIR="/var/www/html/$REPO_NAME"
+if [ ! -d "$PROJECT_DIR" ]; then
+    error_exit "Project directory not found: $PROJECT_DIR"
+fi
+
+# Change to project directory
+cd "$PROJECT_DIR" || error_exit "Failed to navigate to project directory: $PROJECT_DIR"
+echo "✓ Working in: $(pwd)"
 
 # Install dependencies with Composer
 echo "Installing Composer dependencies..."
@@ -866,29 +884,85 @@ fi
 echo "Installing dependencies (this may take a few minutes)..."
 echo "Note: Installation may pause for large packages - this is normal."
 
+# Ensure we're in the correct project directory
+cd "/var/www/html/$REPO_NAME" || error_exit "Failed to navigate to project directory"
+echo "Working in directory: $(pwd)"
+
+# Verify composer.json exists
+if [ ! -f "composer.json" ]; then
+    echo "⚠️ No composer.json found in project directory"
+    echo "This might indicate:"
+    echo "  - Not a PHP/Laravel project"
+    echo "  - Incomplete repository clone"
+    echo "  - Different project structure"
+    echo ""
+    if confirm "Do you want to continue without Composer dependencies?"; then
+        echo "Skipping Composer installation"
+        return
+    else
+        error_exit "composer.json not found in project"
+    fi
+fi
+
 # Try different installation strategies
+NPM_INSTALL_SUCCESS=false
+
+# Strategy 1: Standard install
+echo "Attempting standard Composer install..."
 if sudo -u www-data composer $INSTALL_CMD --optimize-autoloader --no-dev --prefer-dist --no-interaction; then
+    COMPOSER_INSTALL_SUCCESS=true
     echo "✓ Composer dependencies installed successfully!"
-elif sudo -u www-data composer $INSTALL_CMD --prefer-dist --no-interaction; then
-    echo "✓ Composer dependencies installed (with dev packages)!"
-elif sudo -u www-data composer $INSTALL_CMD --prefer-source --no-interaction; then
-    echo "✓ Composer dependencies installed from source!"
 else
-    echo "⚠️ Standard composer install failed, trying manual approach..."
-    # Last resort: try with timeout and verbose output
-    sudo -u www-data composer $INSTALL_CMD --prefer-dist --no-interaction -vvv --timeout=0 || {
-        echo "❌ Composer installation failed completely."
-        echo "This might be due to:"
-        echo "1. Network connectivity issues"
-        echo "2. GitHub rate limiting (consider adding a GitHub token)"
-        echo "3. Server resource constraints"
-        echo ""
-        if confirm "Do you want to continue without composer dependencies? (Not recommended)"; then
-            echo "Continuing without dependencies - you'll need to run 'composer install' manually later"
+    echo "⚠️ Standard install failed, trying alternative methods..."
+    
+    # Strategy 2: Install with dev dependencies
+    echo "Trying with dev dependencies..."
+    if sudo -u www-data composer $INSTALL_CMD --prefer-dist --no-interaction; then
+        COMPOSER_INSTALL_SUCCESS=true
+        echo "✓ Composer dependencies installed (with dev packages)!"
+    else
+        echo "⚠️ Install with dev failed, trying source packages..."
+        
+        # Strategy 3: Use source packages
+        echo "Trying with source packages..."
+        if sudo -u www-data composer $INSTALL_CMD --prefer-source --no-interaction; then
+            COMPOSER_INSTALL_SUCCESS=true
+            echo "✓ Composer dependencies installed from source!"
         else
-            error_exit "Failed to install Composer dependencies"
+            echo "⚠️ Source install failed, trying basic install..."
+            
+            # Strategy 4: Basic install without extra flags
+            echo "Trying basic install..."
+            if sudo -u www-data composer $INSTALL_CMD --no-interaction; then
+                COMPOSER_INSTALL_SUCCESS=true
+                echo "✓ Composer dependencies installed with basic method!"
+            else
+                echo "❌ All Composer install methods failed"
+                COMPOSER_INSTALL_SUCCESS=false
+            fi
         fi
-    }
+    fi
+fi
+
+if [ "$COMPOSER_INSTALL_SUCCESS" != true ]; then
+    echo ""
+    echo "❌ Composer installation failed completely."
+    echo "This might be due to:"
+    echo "1. Network connectivity issues"
+    echo "2. GitHub rate limiting (consider adding a GitHub token)"
+    echo "3. Server resource constraints"
+    echo "4. Invalid composer.json file"
+    echo ""
+    echo "Manual troubleshooting steps:"
+    echo "  cd /var/www/html/$REPO_NAME"
+    echo "  sudo -u www-data composer validate"
+    echo "  sudo -u www-data composer install -vvv"
+    echo ""
+    if confirm "Do you want to continue without composer dependencies? (Not recommended)"; then
+        echo "Continuing without dependencies - you'll need to run 'composer install' manually later"
+    else
+        error_exit "Failed to install Composer dependencies"
+    fi
 fi
 
 # Setup environment file
