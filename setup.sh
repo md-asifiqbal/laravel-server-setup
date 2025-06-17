@@ -1819,12 +1819,89 @@ if [ "$INSTALL_REDIS" = true ]; then
     sudo apt install -y redis-server || error_exit "Failed to install Redis"
     sudo systemctl enable redis-server
     sudo systemctl start redis-server
+    
+    # Update Redis configuration in .env file
+    echo "Updating Redis configuration in .env file..."
+    cd /var/www/html/$REPO_NAME
+    
+    # Ask if user wants to set Redis password
+    if confirm "Do you want to set a password for Redis?"; then
+        safe_read "Enter Redis password" "" REDIS_PASSWORD
+        
+        # Update Redis configuration file to use password
+        echo "Configuring Redis password..."
+        sudo sed -i "s/# requirepass foobared/requirepass $REDIS_PASSWORD/" /etc/redis/redis.conf
+        
+        # Update .env file with Redis password
+        sudo sed -i "s/REDIS_PASSWORD=.*/REDIS_PASSWORD=$REDIS_PASSWORD/" .env
+        
+        # Restart Redis to apply password
+        sudo systemctl restart redis-server
+    else
+        # Ensure password is set to null in .env
+        sudo sed -i "s/REDIS_PASSWORD=.*/REDIS_PASSWORD=null/" .env
+    fi
+    
+    # Update Redis host and port in .env
+    sudo sed -i "s/REDIS_HOST=.*/REDIS_HOST=127.0.0.1/" .env
+    sudo sed -i "s/REDIS_PORT=.*/REDIS_PORT=6379/" .env
+    
+    # Update driver configurations in .env
+    if [ "$INSTALL_REDIS_FOR_QUEUE" = true ]; then
+        echo "Updating queue connection to Redis in .env..."
+        sudo sed -i "s/QUEUE_CONNECTION=.*/QUEUE_CONNECTION=redis/" .env
+    fi
+    
+    if [ "$INSTALL_REDIS_FOR_CACHE" = true ]; then
+        echo "Updating cache driver to Redis in .env..."
+        sudo sed -i "s/CACHE_DRIVER=.*/CACHE_DRIVER=redis/" .env
+        # Add CACHE_STORE setting if it doesn't exist, otherwise update it
+        if grep -q "CACHE_STORE" .env; then
+            sudo sed -i "s/CACHE_STORE=.*/CACHE_STORE=redis/" .env
+        else
+            # Add after CACHE_DRIVER line
+            sudo sed -i "/CACHE_DRIVER=.*/a CACHE_STORE=redis" .env
+        fi
+    fi
+    
+    if [ "$INSTALL_REDIS_FOR_SESSION" = true ]; then
+        echo "Updating session driver to Redis in .env..."
+        sudo sed -i "s/SESSION_DRIVER=.*/SESSION_DRIVER=redis/" .env
+    fi
+    
     echo "✓ Redis installed and configured for your selected drivers!"
 elif confirm "Do you want to install Redis for future use (caching/sessions/queues)?"; then
     echo "Installing Redis..."
     sudo apt install -y redis-server || error_exit "Failed to install Redis"
     sudo systemctl enable redis-server
     sudo systemctl start redis-server
+    
+    # Update Redis configuration in .env file
+    echo "Updating Redis configuration in .env file..."
+    cd /var/www/html/$REPO_NAME
+    
+    # Ask if user wants to set Redis password
+    if confirm "Do you want to set a password for Redis?"; then
+        safe_read "Enter Redis password" "" REDIS_PASSWORD
+        
+        # Update Redis configuration file to use password
+        echo "Configuring Redis password..."
+        sudo sed -i "s/# requirepass foobared/requirepass $REDIS_PASSWORD/" /etc/redis/redis.conf
+        
+        # Update .env file with Redis password
+        sudo sed -i "s/REDIS_PASSWORD=.*/REDIS_PASSWORD=$REDIS_PASSWORD/" .env
+        
+        # Restart Redis to apply password
+        sudo systemctl restart redis-server
+    else
+        # Ensure password is set to null in .env
+        sudo sed -i "s/REDIS_PASSWORD=.*/REDIS_PASSWORD=null/" .env
+    fi
+    
+    # Update Redis host and port in .env
+    sudo sed -i "s/REDIS_HOST=.*/REDIS_HOST=127.0.0.1/" .env
+    sudo sed -i "s/REDIS_PORT=.*/REDIS_PORT=6379/" .env
+    
     echo "✓ Redis installed and ready for use!"
 fi
 
