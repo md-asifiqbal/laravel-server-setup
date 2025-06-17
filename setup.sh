@@ -1743,8 +1743,24 @@ server {
     server_name ${DOMAIN_NAME};
     root /var/www/html/${REPO_NAME}/public;
 
-    add_header X-Frame-Options "SAMEORIGIN";
-    add_header X-Content-Type-Options "nosniff";
+    # Security headers
+    add_header X-Frame-Options "SAMEORIGIN" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header X-XSS-Protection "1; mode=block" always;
+    add_header Referrer-Policy "no-referrer-when-downgrade" always;
+
+    # Gzip compression
+    gzip on;
+    gzip_vary on;
+    gzip_min_length 1024;
+    gzip_types
+        text/plain
+        text/css
+        text/xml
+        text/javascript
+        application/javascript
+        application/xml+rss
+        application/json;
 
     index index.php;
 
@@ -1759,7 +1775,14 @@ server {
 
     error_page 404 /index.php;
 
-    location ~ \.php$ {
+    # Handle static assets
+    location ~* \.(css|js|jpeg|jpg|gif|png|ico|svg|woff|woff2|ttf|eot)\$ {
+        expires 1M;
+        add_header Cache-Control "public, immutable";
+        try_files \$uri =404;
+    }
+
+    location ~ \.php\$ {
         fastcgi_pass unix:/var/run/php/php${PHP_VERSION}-fpm.sock;
         fastcgi_param SCRIPT_FILENAME \$realpath_root\$fastcgi_script_name;
         include fastcgi_params;
